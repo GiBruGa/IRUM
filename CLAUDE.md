@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Cross-project design rules (stack, naming, visual identity, data-collection philosophy) live in
+`..\Regles Generales de Conception des Modules UrBizia.md` — read that first, this file only covers
+what's specific to IVQ.
+
 ## What this is
 
 IVQ (Incivility & Vandalism Qualification) is the module of the SitInZen innovation axis that turns
@@ -21,9 +25,18 @@ adjacent HiKleen automation / EkoMa alerting modules) but is being built as its 
 
 ## Status
 
-Repo initialized 2026-08-30. No code yet — pre-implementation/scoping stage. Waiting on: sample I&V
-photos from the user to validate detection approach, and a decision on data flow (where photos come
-from — likely PointSan Mobile/SpotSan capture — and where qualified results are stored/surfaced).
+Repo initialized 2026-08-30. No code yet — pre-implementation/scoping stage.
+
+**Photo source (decided 2026-08-30)**: IVQ consumes the I&V photos already captured by SpotSan's
+"Signaler une Incivilité ou un Vandalisme" flow — SpotSan's core business purpose for UrBizia *is*
+building this training dataset (see the general rules file, data-collection principle). Not a separate
+collection effort. Bootstrapped today with ~100 photos taken manually before SpotSan existed, added by
+Gilles. Plan: once the detection approach is validated, Gilles intends to tour all public sanitaires in
+the Bordeaux area in the coming weeks specifically to bulk-collect more example photos via SpotSan.
+
+Still open: where qualified démérite results get stored/surfaced (own table? feeds into HiKleen/EkoMa
+alerting?), and whether phase-1 vision-LLM calls go through the Anthropic API directly or some other
+path.
 
 ## Conventions specific to this codebase
 
