@@ -22,6 +22,37 @@ Combiner les points 2 et 4 : tout le code, les prompts, la taxonomie I&V, la for
 
 Un modèle réellement auto-hébergé (point 3) reste une option pour plus tard, si l'indépendance vis-à-vis de tout fournisseur d'API devient un critère prioritaire — mais cela suppose d'abord d'avoir constitué un dataset labellisé via les résultats de la phase 1, ce qui n'existe pas encore aujourd'hui.
 
+## Estimation du coût de l'API Claude (phase 1)
+
+*Addendum du 2026-08-30, en réponse à la question : « combien cela coûtera d'utiliser l'API de Claude ? »*
+
+L'API Claude est facturée au token consommé, sans abonnement mensuel fixe — le coût dépend directement du volume de photos analysées. Ce qui compose un appel « une photo → un résultat qualifié » :
+
+- L'image elle-même : environ 1 000 à 1 600 tokens selon sa résolution (l'API la redimensionne automatiquement ; ~750 pixels = 1 token).
+- Le prompt d'instructions (taxonomie I&V, règles de démérite) : quelques centaines de tokens, réductibles de ~90% via le cache de prompt puisque ce bloc ne change pas d'une photo à l'autre.
+- La réponse structurée (type d'incivilité, score de démérite, justification courte) : environ 200 à 400 tokens de sortie.
+
+*Hypothèse retenue pour les estimations ci-dessous : ~1 500 tokens en entrée et ~300 en sortie par photo, hors cache.*
+
+**Tarifs par modèle (par million de tokens) :**
+
+| Modèle | Entrée ($/1M) | Sortie ($/1M) | Coût estimé / photo |
+|---|---|---|---|
+| Haiku 4.5 (le plus léger) | $1,00 | $5,00 | ≈ $0,003 |
+| Sonnet 5 | $2,00 | $10,00 | ≈ $0,006 |
+| Opus 5 (le plus capable) | $5,00 | $25,00 | ≈ $0,015 |
+
+**Projection mensuelle (ordre de grandeur, ~1$ ≈ 0,92€) :**
+
+| Volume / mois | Haiku 4.5 | Sonnet 5 | Opus 5 |
+|---|---|---|---|
+| 1 000 photos | ≈ 3 $ (2,8 €) | ≈ 6 $ (5,5 €) | ≈ 15 $ (14 €) |
+| 10 000 photos | ≈ 30 $ (28 €) | ≈ 60 $ (55 €) | ≈ 150 $ (138 €) |
+
+Pour une tâche de classification comme celle-ci (pas du raisonnement complexe), Haiku 4.5 ou Sonnet 5 suffisent probablement — pas besoin d'Opus 5 a priori, à réserver au cas où la fiabilité de détection s'avère insuffisante sur les modèles plus légers. À confirmer empiriquement une fois les photos d'exemple disponibles pour tester la précision réelle sur chaque modèle.
+
+*Ces chiffres sont des ordres de grandeur, pas une facture — le coût réel dépendra de la taille effective des photos et de la longueur finale du prompt, à mesurer une fois le premier prototype branché. Ils n'incluent pas l'hébergement Supabase (reste en free tier comme le reste du projet UrBizia).*
+
 ## Question ouverte
 
 L'indépendance vis-à-vis d'un fournisseur d'IA est-elle déjà un critère important dès maintenant, ou peut-on avancer avec l'approche API en phase 1 et réévaluer plus tard ?
