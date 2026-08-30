@@ -41,6 +41,29 @@ Architecture des IHM). Not a separate app like SpotSan.
 Still open: where qualified démérite results get stored (own table? feeds into HiKleen/EkoMa alerting?),
 and whether phase-1 vision-LLM calls go through the Anthropic API directly or some other path.
 
+**Data pipeline built (2026-08-30)**: `Incivilites_Taxonomie` (shared reference table, replaces the old
+hardcoded 12-item lists duplicated in SpotSan-V2/EkoMa; public read, admin-only write via
+`has_tool_access('fbs','admin')`) and `Incident_Report_Tags` (junction table — multi-tag per photo, a
+single incident photo can carry several I&V types at once). RPC `signaler_incivilite` updated to
+`p_tags text[]`. SpotSan-V2's report form is multi-select (was single-select). EkoMa got a new admin tab
+(`Administration > SitInZen > IVQ`, flat tab for now — the general rule's `SitInZen > <Module>` nesting
+isn't built as real UI nesting yet, revisit if a second SitInZen module needs it) with: photo gallery +
+inline multi-tag correction (signed URLs against the private `PointSan-Incidents` bucket), taxonomy
+CRUD (soft-deactivate only, never hard-delete a tag — would orphan historical taggings), and a
+EXIF+CSV export (`piexifjs` + `JSZip`, both loaded via CDN — embeds UB_id/date/tags in each JPEG's
+`ImageDescription`/`UserComment`, plus a `manifest.csv` fallback since EXIF is commonly stripped by
+image-processing tools downstream).
+
+Local working copy of sample photos: `D:\UrBizia - Anthropic\I&V\` (not the Supabase bucket — bucket
+stays private deliberately, to prevent third-party scraping of the training set; Gilles copies photos
+there by hand, that's the agreed channel for Claude to actually look at real photos).
+
+**Legacy data still needing manual correction** (use the new EkoMa IVQ tab): `Incident_Reports` rows
+5, 7, 8, 11, 13 have no tag yet — row 5's source text was garbled ("Taf + auticilanr"), rows 7/8/13 are
+ambiguously "Salissures" (`Salissures volontaires` vs `Défaut de nettoyage`, needs the actual photo to
+judge), row 11 originally had two free-text tags at once (now exactly what the junction table supports,
+just needs Gilles to check both boxes).
+
 ## Conventions specific to this codebase
 
 - French throughout for domain terms and UI (consistent with the rest of the UrBizia project), English
