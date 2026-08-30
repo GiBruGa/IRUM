@@ -34,9 +34,12 @@ collection effort. Bootstrapped today with ~100 photos taken manually before Spo
 Gilles. Plan: once the detection approach is validated, Gilles intends to tour all public sanitaires in
 the Bordeaux area in the coming weeks specifically to bulk-collect more example photos via SpotSan.
 
-Still open: where qualified démérite results get stored/surfaced (own table? feeds into HiKleen/EkoMa
-alerting?), and whether phase-1 vision-LLM calls go through the Anthropic API directly or some other
-path.
+**Admin UI (decided 2026-08-30)**: no standalone app for IVQ — settings/results/anything IVQ needs to
+expose to a human goes under EkoMa, `Administration > SitInZen > IVQ` (see the general rules file,
+Architecture des IHM). Not a separate app like SpotSan.
+
+Still open: where qualified démérite results get stored (own table? feeds into HiKleen/EkoMa alerting?),
+and whether phase-1 vision-LLM calls go through the Anthropic API directly or some other path.
 
 ## Conventions specific to this codebase
 
