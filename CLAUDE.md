@@ -42,10 +42,10 @@ Still open: where qualified démérite results get stored (own table? feeds into
 and whether phase-1 vision-LLM calls go through the Anthropic API directly or some other path.
 
 **Data pipeline built (2026-08-30)**: `Incivilites_Taxonomie` (shared reference table, replaces the old
-hardcoded 12-item lists duplicated in SpotSan-V2/EkoMa; public read, admin-only write via
+hardcoded 12-item lists duplicated in SpotSan/EkoMa; public read, admin-only write via
 `has_tool_access('fbs','admin')`) and `Incident_Report_Tags` (junction table — multi-tag per photo, a
 single incident photo can carry several I&V types at once). RPC `signaler_incivilite` updated to
-`p_tags text[]`. SpotSan-V2's report form is multi-select (was single-select). EkoMa got a new admin tab
+`p_tags text[]`. SpotSan's report form is multi-select (was single-select). EkoMa got a new admin tab
 (`Administration > SitInZen > IVQ`, flat tab for now — the general rule's `SitInZen > <Module>` nesting
 isn't built as real UI nesting yet, revisit if a second SitInZen module needs it) with: photo gallery +
 inline multi-tag correction (signed URLs against the private `PointSan-Incidents` bucket), taxonomy
