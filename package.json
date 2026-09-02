@@ -1,0 +1,14 @@
+{
+  "name": "ivq-detection",
+  "version": "0.1.0",
+  "description": "IVQ phase 1 : classification I&V/défauts d'entretien sur photo, via l'API Claude (vision). Voir CLAUDE.md.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "detecter": "node detection_iv.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.70.0",
+    "zod": "^4.1.5"
+  }
+}
