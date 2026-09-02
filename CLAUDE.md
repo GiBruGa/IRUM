@@ -130,6 +130,27 @@ to the source photos — lists filenames already fully processed (classified *an
 folder; skipped automatically on the next run of the same folder. Shared across models today (no
 per-model suffix) — delete/rename it to force reprocessing with a different model.
 
+**Taxonomie à deux niveaux : catégorie IVDER + qualification (2026-09-02)**: `Incivilites_Taxonomie` got
+`categorie_ivder` (short codes `I`/`V`/`E`/`R` — Incivilité/Vandalisme/Défaut d'Entretien/Défaut de
+Réparation, chosen over full labels for memorability) and `propose_par_ia` (boolean). The AI's output
+schema itself didn't change (`tags` stays a flat string array — simpler, no Zod/CSV/Incident_Report_Tags
+rework needed) — instead the *prompt* now groups the taxonomy listing by I/V/E/R category and asks the
+model to reason category-by-category, and each tag's `categorie_ivder` makes it queryable/groupable
+after the fact (EkoMa's taxonomy list now shows `[I]`/`[V]`/`[E]`/`[R]` per tag). The generic "Autre" tag
+was replaced by 4 category-specific ones (`Autre (Incivilité)` etc., soft-deactivated the old one, never
+hard-deleted). Also added the "Défaut d'entretien"/"Défaut de réparation" tags that were only discussed
+on 2026-08-31 but never actually created until now (calcaire, crasse accumulée, excès d'eau, fuite de
+toit) — starting set, not exhaustive.
+
+**AI can propose a free-text tag instead of forcing "Autre" (2026-09-02)**: when nothing in the taxonomy
+fits, the prompt now asks for a short precise label (2-5 words) instead of a generic bucket — richer
+signal to review than "Autre, unspecified". `enregistrerDansSupabase` auto-creates any tag the AI returns
+that isn't already known, as an `Incivilites_Taxonomie` row with `propose_par_ia=true` (needed anyway to
+satisfy `Incident_Report_Tags.tag`'s foreign key) — EkoMa's IVQ tab flags these with a 🆕 badge and a
+"Valider" button (clears the flag once Gilles has reviewed one). Point is for Gilles to periodically scan
+these and decide whether to keep/rename/formalize them into SpotSan's default list, per his own call —
+Claude doesn't promote a proposed tag to "official" on its own.
+
 **SDK gotcha (installed `@anthropic-ai/sdk` 0.70.1)**: `zodOutputFormat`/`output_config.format` from the
 skill's cached docs don't exist in this version — the real path is `betaZodOutputFormat` from
 `@anthropic-ai/sdk/helpers/beta/zod`, used via `client.beta.messages.parse({..., output_format: ...})`.
