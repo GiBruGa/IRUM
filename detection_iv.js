@@ -33,7 +33,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 // Repli si Supabase est injoignable — doit rester en phase avec la table
 // Incivilites_Taxonomie ; ne pas laisser diverger longtemps si modifiée
-// depuis l'onglet EkoMa > Administration > SitInZen > IVQ.
+// depuis l'onglet EkoMa > Administration > SitInZen > IVQ. criteres_detection
+// volontairement vide ici : le repli n'a pas vocation à porter les critères
+// affinés au fil des retours humains, seulement à éviter un plantage.
 const TAXONOMIE_REPLI = [
   "Excès de papier / corps étranger",
   "Déchets/fluides non identifiés (lave-main)",
@@ -47,7 +49,7 @@ const TAXONOMIE_REPLI = [
   "Serrure ou porte forcée",
   "Excréments au sol ou sur les murs",
   "Autre",
-];
+].map((tag) => ({ tag, criteres_detection: null }));
 
 const MEDIA_TYPES = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
@@ -70,14 +72,15 @@ const ResultatSchema = z.object({
 });
 
 function parseArgs() {
-  const args = { dossier: 'D:\\UrBizia - Anthropic\\I&V', limite: 10, modele: 'claude-opus-5', sortie: null };
+  const args = { dossier: 'D:\\UrBizia - Anthropic\\I&V', limite: 10, modele: 'claude-opus-5', sortie: null, supabase: true };
   const argv = process.argv.slice(2);
   for (let i = 0; i < argv.length; i++) {
-    const [cle, val] = [argv[i], argv[i + 1]];
+    const cle = argv[i], val = argv[i + 1];
     if (cle === '--dossier') { args.dossier = val; i++; }
     else if (cle === '--limite') { args.limite = Number(val); i++; }
     else if (cle === '--modele') { args.modele = val; i++; }
     else if (cle === '--sortie') { args.sortie = val; i++; }
+    else if (cle === '--sans-supabase') { args.supabase = false; }
   }
   if (!TARIFS[args.modele]) {
     throw new Error(`Modèle inconnu : ${args.modele}. Choix possibles : ${Object.keys(TARIFS).join(', ')}`);
@@ -87,14 +90,13 @@ function parseArgs() {
 
 async function chargerTaxonomie() {
   try {
-    const url = `${SUPABASE_URL}/rest/v1/Incivilites_Taxonomie?select=tag&actif=eq.true&order=ordre`;
+    const url = `${SUPABASE_URL}/rest/v1/Incivilites_Taxonomie?select=tag,criteres_detection&actif=eq.true&order=ordre`;
     const res = await fetch(url, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const rows = await res.json();
-    const tags = rows.map((r) => r.tag);
-    if (tags.length) return tags;
+    if (rows.length) return rows;
   } catch (e) {
     console.warn(`Avertissement : taxonomie Supabase injoignable (${e.message}), repli sur la liste embarquée.`);
   }
@@ -102,11 +104,19 @@ async function chargerTaxonomie() {
 }
 
 function construirePrompt(taxonomie) {
-  const liste = taxonomie.map((t) => `- ${t}`).join('\n');
+  // Les criteres_detection (retours de validation humaine, affinés au fil
+  // des lots via l'onglet EkoMa > Administration > SitInZen > IVQ) sont
+  // inclus quand ils existent -- c'est le canal pour corriger un angle mort
+  // du modele sans toucher au code, ex. "Feu / Brûlure" (2026-09-02) :
+  // jamais un feu actif, un constat de brulure (aureole, suie).
+  const liste = taxonomie
+    .map((t) => `- ${t.tag}` + (t.criteres_detection ? ` (${t.criteres_detection})` : ''))
+    .join('\n');
   return (
     "Tu analyses une photo de sanitaire public pour UrBizia. Identifie si elle montre une " +
     "incivilité, un acte de vandalisme, ou un défaut d'entretien/réglage, parmi cette liste " +
-    "EXACTE de catégories (n'en invente aucune autre ; choisis-en zéro, une ou plusieurs) :\n" +
+    "EXACTE de catégories (n'en invente aucune autre ; choisis-en zéro, une ou plusieurs) — les " +
+    "précisions entre parenthèses sont des critères de détection à respecter strictement :\n" +
     `${liste}\n\n` +
     "Si la photo montre un sanitaire en état normal, sans aucun de ces problèmes visibles, " +
     "réponds etat_normal=true et une liste de tags vide."
@@ -167,17 +177,111 @@ function csvEchapper(val) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+// Enregistre un constat dans Supabase (bucket PointSan-Incidents +
+// Incident_Reports + Incident_Report_Tags) sous le sanitaire virtuel
+// UB-DETECIA, verifie_humain=false — c'est ce qui rend chaque photo
+// cliquable/corrigeable dans EkoMa (onglet IVQ ou Modération, badge orange
+// "à vérifier") au lieu de rester seulement dans le CSV local. Ecrit en
+// REST brut (pas de dependance au SDK supabase-js) pour rester coherent
+// avec chargerTaxonomie plus haut, et parce que ce n'est que 2 endpoints.
+// N'importe quelle erreur ici est non-bloquante pour le lot (le CSV local
+// reste la trace de secours).
+//
+// Cle utilisee (2026-09-02) : la cle publique (anon) suffit pour le depot
+// de la photo (bucket-only policy) mais PAS pour creer les lignes
+// Incident_Reports/Incident_Report_Tags -- ces policies exigent un role
+// "authenticated" (une vraie session), pas juste la cle anon statique.
+// Plutot que de creer une session moi-meme (reserve a Gilles, cf. regles de
+// securite), on utilise la cle service_role (contourne RLS), fournie par
+// Gilles via SUPABASE_SERVICE_ROLE_KEY -- jamais codee en dur ici, cle
+// sensible cote serveur uniquement, ne jamais l'exposer cote client/app.
+const UB_ID_DETECTIONS = 'UB-DETECIA';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+async function enregistrerDansSupabase(cheminImage, resultat, modele, tempsMs) {
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("variable d'environnement SUPABASE_SERVICE_ROLE_KEY absente (voir CLAUDE.md) — pas d'envoi possible vers EkoMa");
+  }
+  const donnees = await fs.readFile(cheminImage);
+  const ext = path.extname(cheminImage).toLowerCase().replace('.', '') || 'jpg';
+  const nomSafe = path.basename(cheminImage, path.extname(cheminImage)).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+  const cheminStockage = `${UB_ID_DETECTIONS}/${Date.now()}_${nomSafe}.${ext}`;
+
+  const up = await fetch(`${SUPABASE_URL}/storage/v1/object/PointSan-Incidents/${cheminStockage}`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': MEDIA_TYPES[path.extname(cheminImage).toLowerCase()] || 'application/octet-stream',
+    },
+    body: donnees,
+  });
+  if (!up.ok) throw new Error(`upload storage HTTP ${up.status} : ${await up.text()}`);
+
+  const description = `[IA ${modele}, confiance ${resultat.confiance}, ${Math.round(tempsMs)}ms] ${resultat.justification}`;
+  const insRes = await fetch(`${SUPABASE_URL}/rest/v1/Incident_Reports`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify({ UB_id: UB_ID_DETECTIONS, Photo: cheminStockage, Description: description, verifie_humain: false }),
+  });
+  if (!insRes.ok) throw new Error(`insert Incident_Reports HTTP ${insRes.status} : ${await insRes.text()}`);
+  const [ligne] = await insRes.json();
+
+  if (resultat.tags.length) {
+    const insTags = await fetch(`${SUPABASE_URL}/rest/v1/Incident_Report_Tags`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(resultat.tags.map((tag) => ({ report_id: ligne.Report_id, tag }))),
+    });
+    if (!insTags.ok) throw new Error(`insert Incident_Report_Tags HTTP ${insTags.status} : ${await insTags.text()}`);
+  }
+}
+
 async function main() {
   const args = parseArgs();
+  if (args.supabase && !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error(
+      "ERREUR : --sans-supabase n'est pas passé mais SUPABASE_SERVICE_ROLE_KEY n'est pas défini.\n" +
+      "Sans cette variable, rien n'apparaîtra dans EkoMa (voir CLAUDE.md pour où la trouver/la définir) --\n" +
+      "arrêt avant de dépenser des tokens Claude pour rien. Relancez après l'avoir définie, ou ajoutez\n" +
+      "--sans-supabase si vous voulez explicitement un lot local-seulement (CSV uniquement)."
+    );
+    process.exit(1);
+  }
   const dossier = args.dossier;
   const entrees = await fs.readdir(dossier, { withFileTypes: true });
   let photos = entrees
     .filter((e) => e.isFile() && MEDIA_TYPES[path.extname(e.name).toLowerCase()])
     .map((e) => path.join(dossier, e.name))
     .sort();
+
+  // Journal de reprise (2026-09-02, reseau instable constate) : une photo
+  // deja classifiee ET envoyee a EkoMa (les deux, pas juste l'un des deux --
+  // plus simple/sur, quitte a re-classifier si seul l'envoi Supabase avait
+  // echoue) est sautee au prochain lancement sur le meme dossier. Partage
+  // entre modeles pour l'instant (pas de suffixe --modele dans le nom) :
+  // pour reprocesser volontairement avec un autre modele, renommer/supprimer
+  // ce fichier.
+  const journalPath = path.join(dossier, '_deja_traites.log');
+  let dejaTraites = new Set();
+  try {
+    const contenu = await fs.readFile(journalPath, 'utf8');
+    dejaTraites = new Set(contenu.split('\n').map((l) => l.trim()).filter(Boolean));
+  } catch { /* pas de journal existant -- premier lancement sur ce dossier */ }
+  const avantReprise = photos.length;
+  photos = photos.filter((p) => !dejaTraites.has(path.basename(p)));
+  if (dejaTraites.size) {
+    console.log(`Reprise : ${dejaTraites.size} photo(s) déjà traitée(s) (voir ${journalPath}) — ${photos.length}/${avantReprise} restante(s).`);
+  }
+
   if (args.limite > 0) photos = photos.slice(0, args.limite);
   if (!photos.length) {
-    console.error('Aucune photo trouvée (extensions supportées : jpg/jpeg/png/gif/webp).');
+    console.error('Aucune photo restante à traiter (extensions supportées : jpg/jpeg/png/gif/webp).');
     process.exit(1);
   }
 
@@ -193,7 +297,7 @@ async function main() {
   const ivderVus = new Set();
   let nbIvderTotal = 0;
   let tempsTotal = 0, tokensEntreeTotal = 0, tokensSortieTotal = 0;
-  let succes = 0, echecs = 0;
+  let succes = 0, echecs = 0, echecsSupabase = 0;
   const parConfiance = { haute: 0, moyenne: 0, basse: 0 };
 
   for (let i = 0; i < photos.length; i++) {
@@ -213,7 +317,22 @@ async function main() {
       lignes.push([nom, Math.round(tempsMs), resultat.etat_normal, resultat.tags.join('; '), resultat.confiance, resultat.justification, usage.input_tokens, usage.output_tokens, '']
         .map(csvEchapper).join(','));
       succes++;
-      console.log(`[${i + 1}/${photos.length}] ${nom} -> ${resultat.etat_normal ? 'RAS' : resultat.tags.join(', ')} (${Math.round(tempsMs)}ms, confiance ${resultat.confiance})`);
+
+      let noteSupabase = '';
+      if (args.supabase) {
+        try {
+          await enregistrerDansSupabase(photo, resultat, args.modele, tempsMs);
+        } catch (e) {
+          echecsSupabase++;
+          noteSupabase = ` [ATTENTION : pas envoyé à EkoMa — ${e.message}]`;
+        }
+      }
+      // Journalisee seulement si tout a reussi (classification + envoi
+      // EkoMa quand demande) -- voir le commentaire sur journalPath.
+      if (!noteSupabase) {
+        try { await fs.appendFile(journalPath, nom + '\n', 'utf8'); } catch { /* non bloquant */ }
+      }
+      console.log(`[${i + 1}/${photos.length}] ${nom} -> ${resultat.etat_normal ? 'RAS' : resultat.tags.join(', ')} (${Math.round(tempsMs)}ms, confiance ${resultat.confiance})${noteSupabase}`);
     } catch (e) {
       echecs++;
       const msg = e instanceof Anthropic.NotFoundError ? `modèle/endpoint introuvable : ${e.message}`
@@ -238,6 +357,8 @@ async function main() {
     nb_succes: succes,
     nb_echecs: echecs,
     taux_echec: photos.length ? echecs / photos.length : 0,
+    supabase_active: args.supabase,
+    nb_echecs_supabase: echecsSupabase,
     temps_ms_total: Math.round(tempsTotal),
     temps_ms_moyen_par_photo: succes ? Math.round(tempsTotal / succes) : null,
     tokens_entree_total: tokensEntreeTotal,
@@ -259,6 +380,11 @@ async function main() {
   console.log(`Coût estimé : $${coutEstime.toFixed(4)} (${succes ? (coutEstime / succes).toFixed(4) : '-'}$/photo)`);
   console.log(`IVDER : ${ivderVus.size} type(s) distinct(s), ${nbIvderTotal} occurrence(s) au total`);
   console.log(`Confiance : haute=${parConfiance.haute} moyenne=${parConfiance.moyenne} basse=${parConfiance.basse}`);
+  if (args.supabase) {
+    console.log(`EkoMa : ${succes - echecsSupabase}/${succes} envoyées à EkoMa (Administration > Modération ou SitInZen · IVQ, sanitaire "${UB_ID_DETECTIONS}")${echecsSupabase ? ` — ${echecsSupabase} échec(s) d'envoi, voir les lignes marquées ci-dessus` : ''}.`);
+  } else {
+    console.log('EkoMa : envoi désactivé (--sans-supabase) — résultats disponibles seulement dans le CSV.');
+  }
   console.log(`\nRésultats : ${sortieCsv}`);
   console.log(`Dimensionnement : ${sortieJson}`);
 }
