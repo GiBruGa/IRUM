@@ -14,6 +14,43 @@ it as a "démérite" = quantité (nombre / surface / volume) × gravité (impact
 service rendu). It sits alongside SitInZen's other systems (sûreté intimité, prise de vue, and the
 adjacent HiKleen automation / EkoMa alerting modules) but is being built as its own chantier here.
 
+## Functional scope (clarified 2026-08-31)
+
+Officially I&V-only in name; functionally broader — see the general rules file, "Positionnement" section,
+for why that gap is deliberate. In practice IVQ covers two families of findings from the same photo,
+sharing one taxonomy table but routed differently downstream:
+
+- **I&V (usager)**: alert the Exploitant in real time; can also deduct points from the reporting-user's
+  or the offending-user's "permis d'utilisation" (see general rules file, points-permit principle — full
+  mechanics TBD).
+- **Défauts d'entretien/réglage** (calcaire, fuite de toit non réparée, crasse accumulée au sol/dans les
+  cavités type lave-main, excès d'eau au sol — Gilles's list was cut off after a 5th bullet that never
+  got typed; ask if there was a missing item): evaluates the cleaning/maintenance subcontractor, not the
+  user. Anticipated to become a real ask from donneurs d'ordre wanting to audit that service — potential
+  competitive angle for UrBizia, not just an internal QA tool.
+
+Both need the same taxonomy table (`Incivilites_Taxonomie`) but distinguishable for routing — a
+`categorie` column (or similar) will likely be needed there when this gets built; not added yet, this is
+still requirements-gathering, not a build task.
+
+**Baseline/onboarding workflow** (for bringing an *existing* sanitaire — "dans son jus" — under
+supervision, not a newly-installed one): capture an initial état de fait, get the Exploitant to formally
+validate it as the accepted baseline (explicitly including degradation that won't be fixed), then only
+flag *new* degradation relative to that baseline going forward — plus communicate the resulting detection
+capability under those baseline conditions (see the calibration caveat below, this is exactly where it
+bites).
+
+**Scoring dimensions**: absolu ("ce qu'on voit" now) + relatif (degradation since 1yr/3yr ago) — the
+relatif axis is broader than Phase 2's original before/after-incident framing (see Roadmap); Gilles wants
+it as an on-demand or periodic service reachable via EkoMa/StatSan for the Exploitant — still open how
+this is scoped (général vs spécifique to IVQ?) and the cadence ("routine annuelle (tous les trimestres)"
+was said in one breath — annual or quarterly? worth confirming, they're not the same thing).
+
+**Detection-capability calibration limit**: detectability depends on the interior cladding/color chosen
+at install (ex.: burns on black tiling are probably undetectable). Needs its own validation procedure —
+planned for *after* the model has learned more from the dark-cell photos already in the sample (or new
+ones fetched specifically for this), not now.
+
 ## Roadmap (phases, not yet both built)
 
 - **Phase 1 (current)**: detection only, single photo, human pre-validation/counter-check before any
