@@ -137,16 +137,29 @@ async function classifierPhoto(client, modele, cheminImage, taxonomie) {
   });
 
   const tempsMs = performance.now() - debut;
-  if (!reponse.parsed) {
-    // Diagnostic : la reponse a ete recue (tokens consommes) mais le champ
-    // .parsed est vide -- on log stop_reason + le texte brut pour comprendre
-    // pourquoi (JSON tronque par max_tokens ? refus ? champ different de ce
-    // que documente le skill claude-api pour cette version du SDK ?).
-    const texte = (reponse.content || []).map((b) => b.text || `[${b.type}]`).join(' | ');
-    console.error(`  diagnostic : stop_reason=${reponse.stop_reason} content=${texte.slice(0, 300)}`);
-    throw new Error(`parsing echoue (stop_reason=${reponse.stop_reason})`);
+
+  let resultat = reponse.parsed;
+  if (!resultat) {
+    // Repli : le SDK (v0.70.1) ne peuple pas toujours .parsed quand un bloc
+    // "thinking" precede le texte (constate le 2026-09-02, Opus 5 -- la
+    // reflexion est activee par defaut). Le JSON est neanmoins present et
+    // conforme dans le dernier bloc texte : on l'extrait et le valide
+    // nous-memes avec le meme schema Zod plutot que de dependre de ce
+    // detail d'implementation du SDK.
+    const blocTexte = [...(reponse.content || [])].reverse().find((b) => b.type === 'text');
+    if (!blocTexte) throw new Error(`aucun bloc texte dans la reponse (stop_reason=${reponse.stop_reason})`);
+    let brut;
+    try {
+      brut = JSON.parse(blocTexte.text);
+    } catch (e) {
+      throw new Error(`JSON invalide dans la reponse : ${e.message} — texte: ${blocTexte.text.slice(0, 200)}`);
+    }
+    const validation = ResultatSchema.safeParse(brut);
+    if (!validation.success) throw new Error(`réponse hors schéma : ${validation.error.message}`);
+    resultat = validation.data;
   }
-  return { resultat: reponse.parsed, usage: reponse.usage, tempsMs };
+
+  return { resultat, usage: reponse.usage, tempsMs };
 }
 
 function csvEchapper(val) {
