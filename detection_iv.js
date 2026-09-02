@@ -66,7 +66,7 @@ const TARIFS = {
 
 const ResultatSchema = z.object({
   etat_normal: z.boolean().describe("true si aucune incivilité/vandalisme/défaut visible sur la photo"),
-  tags: z.array(z.string()).describe("sous-ensemble exact de la taxonomie fournie ; vide si etat_normal=true"),
+  tags: z.array(z.string()).describe("qualifications de la taxonomie fournie qui s'appliquent, ou un intitulé libre court si aucune ne correspond (voir consignes) ; vide si etat_normal=true"),
   confiance: z.enum(['haute', 'moyenne', 'basse']).describe("confiance dans ce constat, en tenant compte de la qualité de la photo (cadrage/luminosité/résolution) autant que de l'ambiguïté du contenu"),
   justification: z.string().describe("une phrase expliquant le constat"),
 });
@@ -90,7 +90,7 @@ function parseArgs() {
 
 async function chargerTaxonomie() {
   try {
-    const url = `${SUPABASE_URL}/rest/v1/Incivilites_Taxonomie?select=tag,criteres_detection&actif=eq.true&order=ordre`;
+    const url = `${SUPABASE_URL}/rest/v1/Incivilites_Taxonomie?select=tag,criteres_detection,categorie_ivder&actif=eq.true&order=ordre`;
     const res = await fetch(url, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
     });
@@ -109,17 +109,36 @@ function construirePrompt(taxonomie) {
   // inclus quand ils existent -- c'est le canal pour corriger un angle mort
   // du modele sans toucher au code, ex. "Feu / Brûlure" (2026-09-02) :
   // jamais un feu actif, un constat de brulure (aureole, suie).
-  const liste = taxonomie
-    .map((t) => `- ${t.tag}` + (t.criteres_detection ? ` (${t.criteres_detection})` : ''))
-    .join('\n');
+  //
+  // Groupe par categorie IVDER (2026-09-02, demande de Gilles ; codes courts
+  // I/V/E/R -- plus memorisables que les intitules complets) : incite le
+  // modele a raisonner categorie par categorie plutot que sur une liste
+  // plate -- pas de changement de schema de sortie (tags reste un simple
+  // tableau de chaines), juste une meilleure structuration du prompt.
+  const CATEGORIES = {
+    I: 'Incivilité (comportement usager, sans destruction)',
+    V: 'Vandalisme (destruction/dégradation volontaire)',
+    E: "Défaut d'Entretien (propreté/nettoyage insuffisant)",
+    R: 'Défaut de Réparation (élément cassé/défaillant à réparer)',
+  };
+  const parCategorie = Object.entries(CATEGORIES).map(([code, libelle]) => {
+    const tags = taxonomie.filter((t) => t.categorie_ivder === code);
+    if (!tags.length) return '';
+    const liste = tags.map((t) => `  - ${t.tag}` + (t.criteres_detection ? ` (${t.criteres_detection})` : '')).join('\n');
+    return `${code} — ${libelle} :\n${liste}`;
+  }).filter(Boolean).join('\n\n');
+
   return (
-    "Tu analyses une photo de sanitaire public pour UrBizia. Identifie si elle montre une " +
-    "incivilité, un acte de vandalisme, ou un défaut d'entretien/réglage, parmi cette liste " +
-    "EXACTE de catégories (n'en invente aucune autre ; choisis-en zéro, une ou plusieurs) — les " +
-    "précisions entre parenthèses sont des critères de détection à respecter strictement :\n" +
-    `${liste}\n\n` +
-    "Si la photo montre un sanitaire en état normal, sans aucun de ces problèmes visibles, " +
-    "réponds etat_normal=true et une liste de tags vide."
+    "Tu analyses une photo de sanitaire public pour UrBizia. Examine-la successivement selon les " +
+    "4 catégories IVDER ci-dessous. Pour chaque catégorie, identifie zéro, une ou plusieurs des " +
+    "qualifications listées qui s'appliquent :\n\n" +
+    `${parCategorie}\n\n` +
+    "Si un problème réel est visible mais ne correspond à AUCUNE qualification listée dans sa " +
+    "catégorie, n'invente pas une correspondance approximative : propose plutôt un intitulé court " +
+    "et précis (2 à 5 mots, en français, cohérent avec le style des libellés ci-dessus) décrivant " +
+    "exactement ce que tu observes.\n\n" +
+    "Si la photo montre un sanitaire en état normal, sans aucun problème visible, réponds " +
+    "etat_normal=true et une liste de tags vide."
   );
 }
 
@@ -198,7 +217,7 @@ function csvEchapper(val) {
 const UB_ID_DETECTIONS = 'UB-DETECIA';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-async function enregistrerDansSupabase(cheminImage, resultat, modele, tempsMs) {
+async function enregistrerDansSupabase(cheminImage, resultat, modele, tempsMs, taxonomie) {
   if (!SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error("variable d'environnement SUPABASE_SERVICE_ROLE_KEY absente (voir CLAUDE.md) — pas d'envoi possible vers EkoMa");
   }
@@ -233,6 +252,30 @@ async function enregistrerDansSupabase(cheminImage, resultat, modele, tempsMs) {
   const [ligne] = await insRes.json();
 
   if (resultat.tags.length) {
+    // Intitulés libres proposés par l'IA (2026-09-02, demande de Gilles :
+    // plutôt qu'un générique "Autre", l'IA peut proposer un court intitulé
+    // précis quand rien dans la taxonomie ne correspond -- cf. construirePrompt).
+    // On les crée à la volée dans Incivilites_Taxonomie, marqués
+    // propose_par_ia=true (revue humaine ensuite dans EkoMa, onglet IVQ,
+    // pour décider de les garder/renommer/les ajouter à SpotSan) -- aussi
+    // nécessaire pour satisfaire la clé étrangère sur Incident_Report_Tags.tag.
+    const connus = new Set(taxonomie.map((t) => t.tag));
+    for (const tag of resultat.tags) {
+      if (connus.has(tag)) continue;
+      const insTax = await fetch(`${SUPABASE_URL}/rest/v1/Incivilites_Taxonomie?on_conflict=tag`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=ignore-duplicates',
+        },
+        body: JSON.stringify({ tag, ordre: 999, actif: true, propose_par_ia: true }),
+      });
+      if (!insTax.ok) throw new Error(`insert Incivilites_Taxonomie (tag proposé "${tag}") HTTP ${insTax.status} : ${await insTax.text()}`);
+      connus.add(tag);
+    }
+
     const insTags = await fetch(`${SUPABASE_URL}/rest/v1/Incident_Report_Tags`, {
       method: 'POST',
       headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
@@ -321,7 +364,7 @@ async function main() {
       let noteSupabase = '';
       if (args.supabase) {
         try {
-          await enregistrerDansSupabase(photo, resultat, args.modele, tempsMs);
+          await enregistrerDansSupabase(photo, resultat, args.modele, tempsMs, taxonomie);
         } catch (e) {
           echecsSupabase++;
           noteSupabase = ` [ATTENTION : pas envoyé à EkoMa — ${e.message}]`;
