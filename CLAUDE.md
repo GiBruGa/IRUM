@@ -14,6 +14,18 @@ it as a "démérite" = quantité (nombre / surface / volume) × gravité (impact
 service rendu). It sits alongside SitInZen's other systems (sûreté intimité, prise de vue, and the
 adjacent HiKleen automation / EkoMa alerting modules) but is being built as its own chantier here.
 
+## Strategic goal of this chantier (stated explicitly 2026-08-31)
+
+The point of this conversation/chantier is not just "get I&V detection working via Claude" — it's to
+build image-analysis AI capability for UrBizia **while keeping a documented path to eventually run this
+on UrBizia's own infrastructure, or on an AI solution UrBizia develops itself**, rather than staying
+permanently dependent on a third-party API. This is why the ownership/architecture question was raised
+and answered early (see `Note - Propriete et Architecture IA.md` in this folder): code, prompts,
+taxonomy, and data all stay UrBizia's, the Claude API is today's inference choice not a lock-in, and a
+self-hosted or custom-trained model remains a live option once a labeled dataset exists (see Phase 2 in
+Roadmap). Every design decision in this project should keep that migration path open, not just solve for
+the immediate API-based build.
+
 ## Functional scope (clarified 2026-08-31)
 
 Officially I&V-only in name; functionally broader — see the general rules file, "Positionnement" section,
