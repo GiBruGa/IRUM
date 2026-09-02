@@ -114,6 +114,22 @@ node detection_iv.js --limite 3 --modele claude-opus-5
 Writes a CSV (per-photo results) + a `_dimensionnement.json` (aggregate metrics, per the Dimensionnement
 rule above) next to the source photos in `I&V\`.
 
+**Writes results into Supabase/EkoMa too (2026-09-02)**: each successful classification also uploads the
+photo to `PointSan-Incidents` and inserts `Incident_Reports`/`Incident_Report_Tags` under the virtual
+sanitaire `UB-DETECIA` (`verifie_humain=false`), so it shows up as an orange "à vérifier" vignette in
+EkoMa's Modération/IVQ tabs — that's the actual human-review surface, not the CSV. Requires
+`SUPABASE_SERVICE_ROLE_KEY` as an environment variable (Supabase dashboard → the project → Project
+Settings → API → "service_role" key — **secret, never the same as the public anon key, never commit it**)
+— the public anon key isn't enough because `Incident_Reports`/`Incident_Report_Tags` inserts require an
+`authenticated` role by RLS design, and creating an auth session is reserved for Gilles, not something
+Claude does itself. Script refuses to start (before spending on Claude) if this var is missing and
+`--sans-supabase` wasn't passed. `--sans-supabase` forces CSV-only mode (no EkoMa write).
+
+**Resume journal (2026-09-02, added for unattended/unreliable-network runs)**: `_deja_traites.log` next
+to the source photos — lists filenames already fully processed (classified *and* sent to EkoMa) for that
+folder; skipped automatically on the next run of the same folder. Shared across models today (no
+per-model suffix) — delete/rename it to force reprocessing with a different model.
+
 **SDK gotcha (installed `@anthropic-ai/sdk` 0.70.1)**: `zodOutputFormat`/`output_config.format` from the
 skill's cached docs don't exist in this version — the real path is `betaZodOutputFormat` from
 `@anthropic-ai/sdk/helpers/beta/zod`, used via `client.beta.messages.parse({..., output_format: ...})`.
