@@ -101,7 +101,31 @@ pas juste valider que la détection marche.
 
 ## Status
 
-Repo initialized 2026-08-30. No code yet — pre-implementation/scoping stage.
+Repo initialized 2026-08-30.
+
+**Phase 1 detection script working end-to-end (2026-09-02)**: `detection_iv.js` (Node, `npm install`
+first) calls `client.beta.messages.parse` with a Zod schema (`betaZodOutputFormat`) for structured
+output. First real pilot (3 photos, `claude-opus-5`): 3/3 success, 0% échec, $0.0368/photo, ~7.7s/photo,
+4 types d'IVDER distincts / 5 occurrences. Run with:
+```
+cd "D:\UrBizia - Anthropic\IVQ"; npm install   # once
+node detection_iv.js --limite 3 --modele claude-opus-5
+```
+Writes a CSV (per-photo results) + a `_dimensionnement.json` (aggregate metrics, per the Dimensionnement
+rule above) next to the source photos in `I&V\`.
+
+**SDK gotcha (installed `@anthropic-ai/sdk` 0.70.1)**: `zodOutputFormat`/`output_config.format` from the
+skill's cached docs don't exist in this version — the real path is `betaZodOutputFormat` from
+`@anthropic-ai/sdk/helpers/beta/zod`, used via `client.beta.messages.parse({..., output_format: ...})`.
+Its `.parsed` field is not reliably populated when a `thinking` block precedes the text block (normal on
+Opus 5, thinking is on by default) — the script falls back to manually extracting the last text block and
+validating it against the same Zod schema itself. Re-check this against the installed SDK version if it
+gets upgraded; don't trust the skill's cached example verbatim.
+
+**First human-validation finding**: one pilot photo ("Feu dans la cuvette.jpg") was tagged only
+"Défaut de nettoyage", not "Feu / Brûlure" as the filename implies — flagged for Gilles to check by eye
+(filename may be misleading, or a real model blind spot; either way this is exactly what phase 1's
+human pre-validation step is for).
 
 **Photo source (decided 2026-08-30)**: IVQ consumes the I&V photos already captured by SpotSan's
 "Signaler une Incivilité ou un Vandalisme" flow — SpotSan's core business purpose for UrBizia *is*
