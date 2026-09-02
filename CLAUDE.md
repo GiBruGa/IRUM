@@ -127,6 +127,29 @@ gets upgraded; don't trust the skill's cached example verbatim.
 (filename may be misleading, or a real model blind spot; either way this is exactly what phase 1's
 human pre-validation step is for).
 
+**Détection criteria per tag (added 2026-09-02)**: `Incivilites_Taxonomie.criteres_detection` (text,
+nullable) — human-validation feedback on what a category actually looks like, fed straight into the
+detection prompt (`construirePrompt` in `detection_iv.js`) when present. First entry, from Gilles after
+the finding above: "Feu / Brûlure" is *never* an active fire in these photos — it's burn evidence (a hot
+spot or brownish halo, soot deposit trailing upward on the wall, a soot halo on the ceiling). This is the
+intended channel for correcting model blind spots discovered via human review, one tag at a time, without
+touching code — EkoMa's taxonomy CRUD (IVQ tab) should eventually expose an edit field for it too (not
+built yet, currently DB-only via SQL).
+
+**Human-verification workflow "VerIA" (decided 2026-09-02)**: for spot-checking a specific detection
+(cumulative-defect cases especially, or anything without a filename hint) against Gilles's own read of
+the photo — reuses the existing Incident_Reports/Incident_Report_Tags pipeline rather than a disconnected
+Excel trail, so findings stay structured and query-able (e.g. for a future AI-vs-human comparison).
+Mechanics: a virtual sanitaire `UB-VERIA` in `SanitaryBlocks_Inventory` (`Exists=false`, so invisible to
+real SpotSan users; geocoded at Gilles's own address, 76 avenue de Thouars, 33400 Talence — doesn't
+functionally matter since this route bypasses SpotSan's proximity check entirely). EkoMa's IVQ tab got a
+"+ Ajouter pour vérification humaine" button (local file picker + tag checkboxes + free-text remark →
+uploads straight to the `PointSan-Incidents` bucket under `UB-VERIA/` and inserts the
+Incident_Reports/Incident_Report_Tags rows) so Gilles never has to go through SpotSan's mobile flow for
+this. Findable and editable from *either* the IVQ tab or the pre-existing Modération tab (built
+2026-08-29, search-a-sanitaire-then-see-its-fiches) — both share the same `renderIncidentRow` component,
+so there's no separate/duplicate UI to maintain for this.
+
 **Photo source (decided 2026-08-30)**: IVQ consumes the I&V photos already captured by SpotSan's
 "Signaler une Incivilité ou un Vandalisme" flow — SpotSan's core business purpose for UrBizia *is*
 building this training dataset (see the general rules file, data-collection principle). Not a separate
