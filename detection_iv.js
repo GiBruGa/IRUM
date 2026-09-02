@@ -150,11 +150,17 @@ async function classifierPhoto(client, modele, cheminImage, taxonomie) {
   if (!mediaType) throw new Error(`extension non gérée : ${ext}`);
 
   const donnees = (await fs.readFile(cheminImage)).toString('base64');
+  if (donnees.length > 10_485_760) {
+    // Limite de l'API vision Claude constatee le 2026-09-02 sur un lot de
+    // 500 (1 cas/500) -- verifiee cote client pour echouer vite et clair
+    // plutot que de payer un aller-retour reseau pour un 400 garanti.
+    throw new Error(`photo trop lourde pour l'API vision (${(donnees.length / 1_048_576).toFixed(1)} Mo encodée en base64, limite 10 Mo) — à compresser/redimensionner manuellement`);
+  }
   const debut = performance.now();
 
   const reponse = await client.beta.messages.parse({
     model: modele,
-    max_tokens: 1024,
+    max_tokens: 2048,
     messages: [{
       role: 'user',
       content: [
