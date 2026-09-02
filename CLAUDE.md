@@ -65,6 +65,31 @@ at install (ex.: burns on black tiling are probably undetectable). Needs its own
 planned for *after* the model has learned more from the dark-cell photos already in the sample (or new
 ones fetched specifically for this), not now.
 
+## Dimensionnement (règle permanente, posée 2026-08-31)
+
+Chaque lancement d'analyse d'image (même un petit lot pilote) doit enregistrer les grandeurs
+permettant de dimensionner progressivement le futur service — impossible à reconstituer après coup,
+donc à capter en direct à chaque exécution, jamais en option :
+
+- Temps de traitement par photo (et total du lot).
+- Équivalent tokens Claude consommés (entrée + sortie), par photo et total.
+- Nb de types d'IVDER distincts détectés dans le lot (voir `lexique.IVDER` = Incivilités, Vandalismes,
+  Défauts d'Entretien ou de Réparation).
+- Nb total d'IVDER détectés (occurrences, pas types).
+- Taux d'échec (photos non traitées : erreur API, format non supporté, etc.).
+
+Deux ajoutés à la demande initiale de Gilles, pour la même raison (aide au dimensionnement, pas
+seulement à la qualité) :
+- **Coût en euros/dollars** — complément direct du compte de tokens, directement actionnable pour
+  budgéter le service.
+- **Répartition par niveau de confiance** (haute/moyenne/basse) — un lot avec beaucoup de "confiance
+  basse" implique plus de relecture humaine à grande échelle ; c'est aussi une ressource à dimensionner,
+  pas seulement un signal qualité.
+
+Objectif : se poser systématiquement la question de ces grandeurs avant tout traitement de masse, pour
+apprendre au fil des lots ce que ça coûte réellement en temps/argent/ressources humaines de relecture —
+pas juste valider que la détection marche.
+
 ## Roadmap (phases, not yet both built)
 
 - **Phase 1 (current)**: detection only, single photo, human pre-validation/counter-check before any
