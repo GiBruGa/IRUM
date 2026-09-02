@@ -24,9 +24,9 @@ sharing one taxonomy table but routed differently downstream:
   or the offending-user's "permis d'utilisation" (see general rules file, points-permit principle — full
   mechanics TBD).
 - **Défauts d'entretien/réglage** (calcaire, fuite de toit non réparée, crasse accumulée au sol/dans les
-  cavités type lave-main, excès d'eau au sol — Gilles's list was cut off after a 5th bullet that never
-  got typed; ask if there was a missing item): evaluates the cleaning/maintenance subcontractor, not the
-  user. Anticipated to become a real ask from donneurs d'ordre wanting to audit that service — potential
+  cavités type lave-main, excès d'eau au sol — starting list, explicitly not exhaustive, more categories
+  will be added as they come up): evaluates the cleaning/maintenance subcontractor, not the user.
+  Anticipated to become a real ask from donneurs d'ordre wanting to audit that service — potential
   competitive angle for UrBizia, not just an internal QA tool.
 
 Both need the same taxonomy table (`Incivilites_Taxonomie`) but distinguishable for routing — a
@@ -41,10 +41,12 @@ capability under those baseline conditions (see the calibration caveat below, th
 bites).
 
 **Scoring dimensions**: absolu ("ce qu'on voit" now) + relatif (degradation since 1yr/3yr ago) — the
-relatif axis is broader than Phase 2's original before/after-incident framing (see Roadmap); Gilles wants
-it as an on-demand or periodic service reachable via EkoMa/StatSan for the Exploitant — still open how
-this is scoped (général vs spécifique to IVQ?) and the cadence ("routine annuelle (tous les trimestres)"
-was said in one breath — annual or quarterly? worth confirming, they're not the same thing).
+relatif axis is broader than Phase 2's original before/after-incident framing (see Roadmap). Confirmed
+2026-08-31: this is the *same* état-vs-état comparison mechanism as the baseline/onboarding workflow
+above, just comparing against a later reference point instead of the initial one — not extra difficulty
+once the rest exists. Filed as a general UrBizia principle, not IVQ-specific — see the general rules
+file, "Outil de comparaison d'état". Delivery cadence (times/year, quarterly floated as one example, not
+decided) is deferred until the rest is built.
 
 **Detection-capability calibration limit**: detectability depends on the interior cladding/color chosen
 at install (ex.: burns on black tiling are probably undetectable). Needs its own validation procedure —
