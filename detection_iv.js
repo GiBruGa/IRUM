@@ -381,7 +381,7 @@ async function main() {
       if (!noteSupabase) {
         try { await fs.appendFile(journalPath, nom + '\n', 'utf8'); } catch { /* non bloquant */ }
       }
-      console.log(`[${i + 1}/${photos.length}] ${nom} -> ${resultat.etat_normal ? 'RAS' : resultat.tags.join(', ')} (${Math.round(tempsMs)}ms, confiance ${resultat.confiance})${noteSupabase}`);
+      console.log(`[${i + 1}/${photos.length} de ce lot — ${dejaTraites.size + i + 1}/${avantReprise} au total] ${nom} -> ${resultat.etat_normal ? 'RAS' : resultat.tags.join(', ')} (${Math.round(tempsMs)}ms, confiance ${resultat.confiance})${noteSupabase}`);
     } catch (e) {
       echecs++;
       const msg = e instanceof Anthropic.NotFoundError ? `modèle/endpoint introuvable : ${e.message}`
@@ -390,7 +390,7 @@ async function main() {
         : e instanceof Anthropic.APIError ? `erreur API (${e.status}) : ${e.message}`
         : e.message;
       lignes.push([nom, '', '', '', '', '', '', '', msg].map(csvEchapper).join(','));
-      console.error(`[${i + 1}/${photos.length}] ${nom} -> ERREUR : ${msg}`);
+      console.error(`[${i + 1}/${photos.length} de ce lot — ${dejaTraites.size + i + 1}/${avantReprise} au total] ${nom} -> ERREUR : ${msg}`);
     }
   }
 
