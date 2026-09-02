@@ -137,6 +137,15 @@ async function classifierPhoto(client, modele, cheminImage, taxonomie) {
   });
 
   const tempsMs = performance.now() - debut;
+  if (!reponse.parsed) {
+    // Diagnostic : la reponse a ete recue (tokens consommes) mais le champ
+    // .parsed est vide -- on log stop_reason + le texte brut pour comprendre
+    // pourquoi (JSON tronque par max_tokens ? refus ? champ different de ce
+    // que documente le skill claude-api pour cette version du SDK ?).
+    const texte = (reponse.content || []).map((b) => b.text || `[${b.type}]`).join(' | ');
+    console.error(`  diagnostic : stop_reason=${reponse.stop_reason} content=${texte.slice(0, 300)}`);
+    throw new Error(`parsing echoue (stop_reason=${reponse.stop_reason})`);
+  }
   return { resultat: reponse.parsed, usage: reponse.usage, tempsMs };
 }
 
@@ -179,7 +188,8 @@ async function main() {
     const nom = path.basename(photo);
     try {
       const { resultat, usage, tempsMs } = await classifierPhoto(client, args.modele, photo, taxonomie);
-      succes++;
+      // Tout ce qui suit peut encore echouer (champ inattendu) -- ne compter
+      // succes qu'une fois la ligne effectivement ecrite, pas avant.
       tempsTotal += tempsMs;
       tokensEntreeTotal += usage.input_tokens;
       tokensSortieTotal += usage.output_tokens;
@@ -189,6 +199,7 @@ async function main() {
 
       lignes.push([nom, Math.round(tempsMs), resultat.etat_normal, resultat.tags.join('; '), resultat.confiance, resultat.justification, usage.input_tokens, usage.output_tokens, '']
         .map(csvEchapper).join(','));
+      succes++;
       console.log(`[${i + 1}/${photos.length}] ${nom} -> ${resultat.etat_normal ? 'RAS' : resultat.tags.join(', ')} (${Math.round(tempsMs)}ms, confiance ${resultat.confiance})`);
     } catch (e) {
       echecs++;
