@@ -2,7 +2,7 @@
   import { supabase } from './supabaseClient.js'
   import { onMount } from 'svelte'
 
-  // Catalogue Tag IVDER : deux listes paralleles (Actifs / En attente), on
+  // Catalogue Tag IVER : deux listes paralleles (Actifs / En attente), on
   // fait glisser un tag de l'une a l'autre pour l'activer/desactiver.
   // "Actif" = seule liste exposee aux usagers SpotSan (pas de tag libre
   // cote usager -- seule l'IA peut proposer un intitule libre, cf.
@@ -24,7 +24,7 @@
     chargement = true
     const { data, error } = await supabase
       .from('Incivilites_Taxonomie')
-      .select('tag,actif,ordre,categorie_ivder,propose_par_ia,criteres_detection')
+      .select('tag,actif,ordre,categorie_iver,propose_par_ia,criteres_detection')
       .order('ordre')
     if (error) { erreur = error.message; chargement = false; return }
     taxonomie = data || []
@@ -71,7 +71,7 @@
     const maxOrdre = taxonomie.reduce((m, t) => Math.max(m, t.ordre), 0)
     const { error } = await supabase
       .from('Incivilites_Taxonomie')
-      .insert({ tag: val, ordre: maxOrdre + 1, categorie_ivder: nouvelleCategorie, actif: true })
+      .insert({ tag: val, ordre: maxOrdre + 1, categorie_iver: nouvelleCategorie, actif: true })
     if (error) { alert('Erreur : ' + error.message); return }
     nouveauTag = ''
     await charger()
@@ -101,7 +101,7 @@
         <h2>Actifs ({actifs.length}) <span class="sous">— disponibles pour les usagers SpotSan</span></h2>
         {#each actifs as t (t.tag)}
           <div class="carte" role="listitem" draggable="true" ondragstart={(e) => surDragStart(e, t.tag)}>
-            {#if t.categorie_ivder}<span class="badge cat-{t.categorie_ivder}">{t.categorie_ivder}</span>{/if}
+            {#if t.categorie_iver}<span class="badge cat-{t.categorie_iver}">{t.categorie_iver}</span>{/if}
             <span class="libelle">{t.tag}</span>
             {#if t.criteres_detection}<span class="critere" title={t.criteres_detection}>ℹ️</span>{/if}
             <button class="fleche" onclick={() => basculerActif(t.tag, false)} title="Désactiver">→</button>
@@ -123,7 +123,7 @@
         {#each enAttente as t (t.tag)}
           <div class="carte" role="listitem" draggable="true" ondragstart={(e) => surDragStart(e, t.tag)}>
             <button class="fleche" onclick={() => basculerActif(t.tag, true)} title="Activer">←</button>
-            {#if t.categorie_ivder}<span class="badge cat-{t.categorie_ivder}">{t.categorie_ivder}</span>{/if}
+            {#if t.categorie_iver}<span class="badge cat-{t.categorie_iver}">{t.categorie_iver}</span>{/if}
             <span class="libelle">{t.tag}{t.propose_par_ia ? ' 🆕' : ''}</span>
           </div>
         {/each}

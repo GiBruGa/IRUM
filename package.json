@@ -1,7 +1,7 @@
 {
-  "name": "ivq-detection",
+  "name": "irum-detection",
   "version": "0.1.0",
-  "description": "IVQ phase 1 : classification I&V/défauts d'entretien sur photo, via l'API Claude (vision). Voir CLAUDE.md.",
+  "description": "IRUM phase 1 : classification IVER (Incivilités, Vandalismes, défauts d'Entretien, de Réparation) sur photo, via l'API Claude (vision). Voir CLAUDE.md.",
   "type": "module",
   "private": true,
   "scripts": {

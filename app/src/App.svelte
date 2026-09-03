@@ -13,9 +13,9 @@
 
 <div class="app">
   <header>
-    <h1>IVQ</h1>
+    <h1>IRUM</h1>
     <nav>
-      <button class:actif={onglet === 'catalogue'} onclick={() => (onglet = 'catalogue')}>Catalogue Tag IVDER</button>
+      <button class:actif={onglet === 'catalogue'} onclick={() => (onglet = 'catalogue')}>Catalogue Tag IVER</button>
       <button class:actif={onglet === 'ponderation'} onclick={() => (onglet = 'ponderation')} disabled>Pondération (à venir)</button>
     </nav>
     <div class="user">

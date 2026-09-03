@@ -1,5 +1,6 @@
-// IVQ — Détection phase 1 : classification I&V / défauts d'entretien sur un
-// lot de photos, via l'API Claude (vision).
+// IRUM — Détection phase 1 : classification IVER (Incivilités, Vandalismes,
+// défauts d'Entretien, de Réparation) sur un lot de photos, via l'API Claude
+// (vision).
 //
 // Architecture volontairement découplée (voir "Note - Propriete et
 // Architecture IA.md" et CLAUDE.md, "Strategic goal") : la taxonomie et le
@@ -11,7 +12,7 @@
 //
 // Dimensionnement (CLAUDE.md, section "Dimensionnement") : chaque exécution
 // enregistre, par photo ET en agrégat — temps de traitement, tokens Claude,
-// coût estimé, nb de types d'IVDER distincts, nb total d'IVDER, taux
+// coût estimé, nb de types d'IVER distincts, nb total d'IVER, taux
 // d'échec, répartition par confiance. Écrit dans un CSV (revue photo par
 // photo) + un JSON récapitulatif (revue rapide, ce fichier ne se
 // reconstitue pas après coup).
@@ -33,7 +34,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 // Repli si Supabase est injoignable — doit rester en phase avec la table
 // Incivilites_Taxonomie ; ne pas laisser diverger longtemps si modifiée
-// depuis l'onglet EkoMa > Administration > SitInZen > IVQ. criteres_detection
+// depuis l'onglet EkoMa > Administration > SitInZen > IRUM. criteres_detection
 // volontairement vide ici : le repli n'a pas vocation à porter les critères
 // affinés au fil des retours humains, seulement à éviter un plantage.
 const TAXONOMIE_REPLI = [
@@ -90,7 +91,7 @@ function parseArgs() {
 
 async function chargerTaxonomie() {
   try {
-    const url = `${SUPABASE_URL}/rest/v1/Incivilites_Taxonomie?select=tag,criteres_detection,categorie_ivder&actif=eq.true&order=ordre`;
+    const url = `${SUPABASE_URL}/rest/v1/Incivilites_Taxonomie?select=tag,criteres_detection,categorie_iver&actif=eq.true&order=ordre`;
     const res = await fetch(url, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
     });
@@ -105,12 +106,12 @@ async function chargerTaxonomie() {
 
 function construirePrompt(taxonomie) {
   // Les criteres_detection (retours de validation humaine, affinés au fil
-  // des lots via l'onglet EkoMa > Administration > SitInZen > IVQ) sont
+  // des lots via l'onglet EkoMa > Administration > SitInZen > IRUM) sont
   // inclus quand ils existent -- c'est le canal pour corriger un angle mort
   // du modele sans toucher au code, ex. "Feu / Brûlure" (2026-09-02) :
   // jamais un feu actif, un constat de brulure (aureole, suie).
   //
-  // Groupe par categorie IVDER (2026-09-02, demande de Gilles ; codes courts
+  // Groupe par categorie IVER (2026-09-02, demande de Gilles ; codes courts
   // I/V/E/R -- plus memorisables que les intitules complets) : incite le
   // modele a raisonner categorie par categorie plutot que sur une liste
   // plate -- pas de changement de schema de sortie (tags reste un simple
@@ -122,7 +123,7 @@ function construirePrompt(taxonomie) {
     R: 'Défaut de Réparation (élément cassé/défaillant à réparer)',
   };
   const parCategorie = Object.entries(CATEGORIES).map(([code, libelle]) => {
-    const tags = taxonomie.filter((t) => t.categorie_ivder === code);
+    const tags = taxonomie.filter((t) => t.categorie_iver === code);
     if (!tags.length) return '';
     const liste = tags.map((t) => `  - ${t.tag}` + (t.criteres_detection ? ` (${t.criteres_detection})` : '')).join('\n');
     return `${code} — ${libelle} :\n${liste}`;
@@ -130,7 +131,7 @@ function construirePrompt(taxonomie) {
 
   return (
     "Tu analyses une photo de sanitaire public pour UrBizia. Examine-la successivement selon les " +
-    "4 catégories IVDER ci-dessous. Pour chaque catégorie, identifie zéro, une ou plusieurs des " +
+    "4 catégories IVER ci-dessous. Pour chaque catégorie, identifie zéro, une ou plusieurs des " +
     "qualifications listées qui s'appliquent :\n\n" +
     `${parCategorie}\n\n` +
     "Si un problème réel est visible mais ne correspond à AUCUNE qualification listée dans sa " +
@@ -205,7 +206,7 @@ function csvEchapper(val) {
 // Enregistre un constat dans Supabase (bucket PointSan-Incidents +
 // Incident_Reports + Incident_Report_Tags) sous le sanitaire virtuel
 // UB-DETECIA, verifie_humain=false — c'est ce qui rend chaque photo
-// cliquable/corrigeable dans EkoMa (onglet IVQ ou Modération, badge orange
+// cliquable/corrigeable dans EkoMa (onglet IRUM ou Modération, badge orange
 // "à vérifier") au lieu de rester seulement dans le CSV local. Ecrit en
 // REST brut (pas de dependance au SDK supabase-js) pour rester coherent
 // avec chargerTaxonomie plus haut, et parce que ce n'est que 2 endpoints.
@@ -262,7 +263,7 @@ async function enregistrerDansSupabase(cheminImage, resultat, modele, tempsMs, t
     // plutôt qu'un générique "Autre", l'IA peut proposer un court intitulé
     // précis quand rien dans la taxonomie ne correspond -- cf. construirePrompt).
     // On les crée à la volée dans Incivilites_Taxonomie, marqués
-    // propose_par_ia=true (revue humaine ensuite dans EkoMa, onglet IVQ,
+    // propose_par_ia=true (revue humaine ensuite dans EkoMa, onglet IRUM,
     // pour décider de les garder/renommer/les ajouter à SpotSan) -- aussi
     // nécessaire pour satisfaire la clé étrangère sur Incident_Report_Tags.tag.
     const connus = new Set(taxonomie.map((t) => t.tag));
@@ -343,8 +344,8 @@ async function main() {
   const sortieJson = sortieCsv.replace(/\.csv$/, '') + '_dimensionnement.json';
 
   const lignes = ['fichier,temps_ms,etat_normal,tags,confiance,justification,tokens_entree,tokens_sortie,erreur'];
-  const ivderVus = new Set();
-  let nbIvderTotal = 0;
+  const iverVus = new Set();
+  let nbIverTotal = 0;
   let tempsTotal = 0, tokensEntreeTotal = 0, tokensSortieTotal = 0;
   let succes = 0, echecs = 0, echecsSupabase = 0;
   const parConfiance = { haute: 0, moyenne: 0, basse: 0 };
@@ -359,8 +360,8 @@ async function main() {
       tempsTotal += tempsMs;
       tokensEntreeTotal += usage.input_tokens;
       tokensSortieTotal += usage.output_tokens;
-      resultat.tags.forEach((t) => ivderVus.add(t));
-      nbIvderTotal += resultat.tags.length;
+      resultat.tags.forEach((t) => iverVus.add(t));
+      nbIverTotal += resultat.tags.length;
       parConfiance[resultat.confiance] = (parConfiance[resultat.confiance] || 0) + 1;
 
       lignes.push([nom, Math.round(tempsMs), resultat.etat_normal, resultat.tags.join('; '), resultat.confiance, resultat.justification, usage.input_tokens, usage.output_tokens, '']
@@ -415,9 +416,9 @@ async function main() {
     tokens_moyen_par_photo: succes ? Math.round((tokensEntreeTotal + tokensSortieTotal) / succes) : null,
     cout_estime_usd: Number(coutEstime.toFixed(4)),
     cout_estime_usd_par_photo: succes ? Number((coutEstime / succes).toFixed(4)) : null,
-    nb_types_ivder_distincts: ivderVus.size,
-    types_ivder_distincts: [...ivderVus].sort(),
-    nb_ivder_total: nbIvderTotal,
+    nb_types_iver_distincts: iverVus.size,
+    types_iver_distincts: [...iverVus].sort(),
+    nb_iver_total: nbIverTotal,
     repartition_confiance: parConfiance,
   };
   await fs.writeFile(sortieJson, JSON.stringify(dimensionnement, null, 2), 'utf8');
@@ -427,10 +428,10 @@ async function main() {
   console.log(`Temps : ${(tempsTotal / 1000).toFixed(1)}s total, ${dimensionnement.temps_ms_moyen_par_photo ?? '-'}ms/photo en moyenne`);
   console.log(`Tokens : ${tokensEntreeTotal} entrée + ${tokensSortieTotal} sortie`);
   console.log(`Coût estimé : $${coutEstime.toFixed(4)} (${succes ? (coutEstime / succes).toFixed(4) : '-'}$/photo)`);
-  console.log(`IVDER : ${ivderVus.size} type(s) distinct(s), ${nbIvderTotal} occurrence(s) au total`);
+  console.log(`IVER : ${iverVus.size} type(s) distinct(s), ${nbIverTotal} occurrence(s) au total`);
   console.log(`Confiance : haute=${parConfiance.haute} moyenne=${parConfiance.moyenne} basse=${parConfiance.basse}`);
   if (args.supabase) {
-    console.log(`EkoMa : ${succes - echecsSupabase}/${succes} envoyées à EkoMa (Administration > Modération ou SitInZen · IVQ, sanitaire "${UB_ID_DETECTIONS}")${echecsSupabase ? ` — ${echecsSupabase} échec(s) d'envoi, voir les lignes marquées ci-dessus` : ''}.`);
+    console.log(`EkoMa : ${succes - echecsSupabase}/${succes} envoyées à EkoMa (Administration > Modération ou SitInZen · IRUM, sanitaire "${UB_ID_DETECTIONS}")${echecsSupabase ? ` — ${echecsSupabase} échec(s) d'envoi, voir les lignes marquées ci-dessus` : ''}.`);
   } else {
     console.log('EkoMa : envoi désactivé (--sans-supabase) — résultats disponibles seulement dans le CSV.');
   }

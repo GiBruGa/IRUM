@@ -2,7 +2,7 @@ import { mount } from 'svelte'
 import App from './App.svelte'
 import { supabase } from './lib/supabaseClient.js'
 
-document.title = 'IVQ'
+document.title = 'IRUM'
 
 // initEkoGate est fourni par le script global charge dans index.html (voir
 // EkoMa/auth-gate.js) -- on ne monte l'app Svelte qu'une fois l'acces
@@ -10,7 +10,7 @@ document.title = 'IVQ'
 // valide. Meme pattern que FBS/RFQ (voir leur CLAUDE.md).
 window.initEkoGate({
   sb: supabase,
-  tool: 'ivq',
+  tool: 'irum',
   onGranted: async (user) => {
     mount(App, {
       target: document.getElementById('app'),

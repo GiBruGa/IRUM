@@ -1,6 +1,6 @@
 name: Build & deploy (GitHub Pages)
 
-# Le repo IVQ contient aussi detection_iv.js (script Node hors du bundle
+# Le repo IRUM contient aussi detection_iv.js (script Node hors du bundle
 # Vite) a la racine -- seul app/ est construit et deploye ici.
 
 on:

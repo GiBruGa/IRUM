@@ -4,19 +4,43 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Cross-project design rules (stack, naming, visual identity, data-collection philosophy) live in
 `..\Regles Generales de Conception des Modules UrBizia.md` — read that first, this file only covers
-what's specific to IVQ.
+what's specific to IRUM.
 
 ## What this is
 
-IVQ (Incivility & Vandalism Qualification) is the module of the SitInZen innovation axis that turns
-a raw sanitaire photo into a qualified incident: detect I&V (incivilités et vandalisme), then score
-it as a "démérite" = quantité (nombre / surface / volume) × gravité (impact AMDEC / dégradation du
-service rendu). It sits alongside SitInZen's other systems (sûreté intimité, prise de vue, and the
-adjacent HiKleen automation / EkoMa alerting modules) but is being built as its own chantier here.
+**IRUM (Incident, Repair & Upkeep Monitoring)** — renamed from "IVQ" on 2026-09-03, see "Naming
+history" below — is the module of the SitInZen innovation axis that turns a raw sanitaire photo into
+a qualified incident: detect IVER (Incivilités, Vandalismes, défauts d'Entretien, défauts de
+Réparation), then score it as a "démérite" = quantité (nombre / surface / volume) × gravité (impact
+AMDEC / dégradation du service rendu). It sits alongside SitInZen's other systems (sûreté intimité,
+prise de vue, and the adjacent HiKleen automation / EkoMa alerting modules) but is being built as its
+own chantier here.
+
+## Naming history (2026-09-03)
+
+Originally "IVQ" (Incivility & Vandalism Qualification), with the finding categories informally
+called "I&V" then "IVDER". Renamed after discussion:
+
+- **Module name**: IVQ → **IRUM** (*Incident, Repair & Upkeep Monitoring*) — "Incident" covers the
+  user-behavior side (Incivilité + Vandalisme), "Repair & Upkeep" the maintenance side (défaut de
+  Réparation + défaut d'Entretien), "Monitoring" covers the whole detect→qualify→quantify chain.
+  **Deliberately reverses the earlier "Positionnement" decision** (see the general rules file): IVQ's
+  name was chosen to stay vague about evaluating the cleaning/maintenance subcontractor, to avoid
+  alarming evaluated parties. IRUM does the opposite on purpose — it names "Repair & Upkeep" openly.
+  Gilles's call, 2026-09-03: the acronym should say plainly that upkeep defects are being monitored.
+- **Category set name**: "I&V"/"IVDER" → **IVER** (Incivilités, Vandalismes, défauts d'Entretien,
+  défauts de Réparation) — matches `Incivilites_Taxonomie.categorie_iver`'s `I`/`V`/`E`/`R` codes
+  letter-for-letter (the old "IVDER" carried a spurious "D" for "Défaut", since renamed away). The E
+  and R categories are implicitly negative (*manque d'*Entretien, *défaut de* Réparation), unlike I/V.
+- Renamed everywhere as part of this change: GitHub repo (`GiBruGa/IVQ` → `GiBruGa/IRUM`, local folder
+  to match), GitHub Pages URL (`/IVQ/` → `/IRUM/`), Supabase `tool_access.tool` key (`ivq` → `irum`),
+  `Incivilites_Taxonomie.categorie_ivder` column (→ `categorie_iver`), `acronymes` row (id `IVQ` →
+  `IRUM`), `lexique` entries (IVDER entry → IVER, new IRUM entry added), EkoMa's admin tab and all
+  code/doc references. See git history for the exact commit.
 
 ## Strategic goal of this chantier (stated explicitly 2026-08-31)
 
-The point of this conversation/chantier is not just "get I&V detection working via Claude" — it's to
+The point of this conversation/chantier is not just "get IVER detection working via Claude" — it's to
 build image-analysis AI capability for UrBizia **while keeping a documented path to eventually run this
 on UrBizia's own infrastructure, or on an AI solution UrBizia develops itself**, rather than staying
 permanently dependent on a third-party API. This is why the ownership/architecture question was raised
@@ -26,13 +50,15 @@ self-hosted or custom-trained model remains a live option once a labeled dataset
 Roadmap). Every design decision in this project should keep that migration path open, not just solve for
 the immediate API-based build.
 
-## Functional scope (clarified 2026-08-31)
+## Functional scope (clarified 2026-08-31, positioning reversed 2026-09-03)
 
-Officially I&V-only in name; functionally broader — see the general rules file, "Positionnement" section,
-for why that gap is deliberate. In practice IVQ covers two families of findings from the same photo,
-sharing one taxonomy table but routed differently downstream:
+Originally named to stay I&V-only on the surface, functionally broader underneath (see "Naming
+history" above) — that deliberate ambiguity was the whole point of the old "IVQ" name (general rules
+file, "Positionnement" section). **Reversed on 2026-09-03**: the new name "IRUM" openly names both
+sides. In practice the module covers two families of findings from the same photo, sharing one
+taxonomy table but routed differently downstream:
 
-- **I&V (usager)**: alert the Exploitant in real time; can also deduct points from the reporting-user's
+- **I/V (usager)**: alert the Exploitant in real time; can also deduct points from the reporting-user's
   or the offending-user's "permis d'utilisation" (see general rules file, points-permit principle — full
   mechanics TBD).
 - **Défauts d'entretien/réglage** (calcaire, fuite de toit non réparée, crasse accumulée au sol/dans les
@@ -56,7 +82,7 @@ bites).
 relatif axis is broader than Phase 2's original before/after-incident framing (see Roadmap). Confirmed
 2026-08-31: this is the *same* état-vs-état comparison mechanism as the baseline/onboarding workflow
 above, just comparing against a later reference point instead of the initial one — not extra difficulty
-once the rest exists. Filed as a general UrBizia principle, not IVQ-specific — see the general rules
+once the rest exists. Filed as a general UrBizia principle, not IRUM-specific — see the general rules
 file, "Outil de comparaison d'état". Delivery cadence (times/year, quarterly floated as one example, not
 decided) is deferred until the rest is built.
 
@@ -73,9 +99,9 @@ donc à capter en direct à chaque exécution, jamais en option :
 
 - Temps de traitement par photo (et total du lot).
 - Équivalent tokens Claude consommés (entrée + sortie), par photo et total.
-- Nb de types d'IVDER distincts détectés dans le lot (voir `lexique.IVDER` = Incivilités, Vandalismes,
+- Nb de types d'IVER distincts détectés dans le lot (voir `lexique.IVER` = Incivilités, Vandalismes,
   Défauts d'Entretien ou de Réparation).
-- Nb total d'IVDER détectés (occurrences, pas types).
+- Nb total d'IVER détectés (occurrences, pas types).
 - Taux d'échec (photos non traitées : erreur API, format non supporté, etc.).
 
 Deux ajoutés à la demande initiale de Gilles, pour la même raison (aide au dimensionnement, pas
@@ -106,9 +132,9 @@ Repo initialized 2026-08-30.
 **Phase 1 detection script working end-to-end (2026-09-02)**: `detection_iv.js` (Node, `npm install`
 first) calls `client.beta.messages.parse` with a Zod schema (`betaZodOutputFormat`) for structured
 output. First real pilot (3 photos, `claude-opus-5`): 3/3 success, 0% échec, $0.0368/photo, ~7.7s/photo,
-4 types d'IVDER distincts / 5 occurrences. Run with:
+4 types d'IVER distincts / 5 occurrences. Run with:
 ```
-cd "D:\UrBizia - Anthropic\IVQ"; npm install   # once
+cd "D:\UrBizia - Anthropic\IRUM"; npm install   # once
 node detection_iv.js --limite 3 --modele claude-opus-5
 ```
 Writes a CSV (per-photo results) + a `_dimensionnement.json` (aggregate metrics, per the Dimensionnement
@@ -117,7 +143,7 @@ rule above) next to the source photos in `I&V\`.
 **Writes results into Supabase/EkoMa too (2026-09-02)**: each successful classification also uploads the
 photo to `PointSan-Incidents` and inserts `Incident_Reports`/`Incident_Report_Tags` under the virtual
 sanitaire `UB-DETECIA` (`verifie_humain=false`), so it shows up as an orange "à vérifier" vignette in
-EkoMa's Modération/IVQ tabs — that's the actual human-review surface, not the CSV. Requires
+EkoMa's Modération/IRUM tabs — that's the actual human-review surface, not the CSV. Requires
 `SUPABASE_SERVICE_ROLE_KEY` as an environment variable (Supabase dashboard → the project → Project
 Settings → API → "service_role" key — **secret, never the same as the public anon key, never commit it**)
 — the public anon key isn't enough because `Incident_Reports`/`Incident_Report_Tags` inserts require an
@@ -130,9 +156,10 @@ to the source photos — lists filenames already fully processed (classified *an
 folder; skipped automatically on the next run of the same folder. Shared across models today (no
 per-model suffix) — delete/rename it to force reprocessing with a different model.
 
-**Taxonomie à deux niveaux : catégorie IVDER + qualification (2026-09-02)**: `Incivilites_Taxonomie` got
-`categorie_ivder` (short codes `I`/`V`/`E`/`R` — Incivilité/Vandalisme/Défaut d'Entretien/Défaut de
-Réparation, chosen over full labels for memorability) and `propose_par_ia` (boolean). The AI's output
+**Taxonomie à deux niveaux : catégorie IVER + qualification (2026-09-02, column renamed 2026-09-03)**:
+`Incivilites_Taxonomie` got `categorie_iver` (short codes `I`/`V`/`E`/`R` — Incivilité/Vandalisme/Défaut
+d'Entretien/Défaut de Réparation, chosen over full labels for memorability; column originally named
+`categorie_ivder`, renamed alongside the IVQ→IRUM rename) and `propose_par_ia` (boolean). The AI's output
 schema itself didn't change (`tags` stays a flat string array — simpler, no Zod/CSV/Incident_Report_Tags
 rework needed) — instead the *prompt* now groups the taxonomy listing by I/V/E/R category and asks the
 model to reason category-by-category, and each tag's `categorie_ivder` makes it queryable/groupable
@@ -146,7 +173,7 @@ toit) — starting set, not exhaustive.
 fits, the prompt now asks for a short precise label (2-5 words) instead of a generic bucket — richer
 signal to review than "Autre, unspecified". `enregistrerDansSupabase` auto-creates any tag the AI returns
 that isn't already known, as an `Incivilites_Taxonomie` row with `propose_par_ia=true` (needed anyway to
-satisfy `Incident_Report_Tags.tag`'s foreign key) — EkoMa's IVQ tab flags these with a 🆕 badge and a
+satisfy `Incident_Report_Tags.tag`'s foreign key) — EkoMa's IRUM tab flags these with a 🆕 badge and a
 "Valider" button (clears the flag once Gilles has reviewed one). Point is for Gilles to periodically scan
 these and decide whether to keep/rename/formalize them into SpotSan's default list, per his own call —
 Claude doesn't promote a proposed tag to "official" on its own.
@@ -158,9 +185,10 @@ human edit no longer erases what the AI actually said. Necessary, not optional: 
 is no way to measure AI accuracy, mine recurring error patterns to improve the prompt (as already done
 for "Feu / Brûlure"), or build a real training/eval set for a future self-hosted model — all three are
 already-stated goals of this chantier. EkoMa's moderation fiche shows the frozen AI diagnosis (tags +
-confiance) read-only above the editable checkboxes.
+confiance) read-only above the editable checkboxes. (Note: this line and the tab name were "IVQ"
+before the 2026-09-03 rename.)
 
-**Review-queue usability (2026-09-03)**: the IVQ tab's checkbox list was unusable once the taxonomy grew
+**Review-queue usability (2026-09-03)**: the IRUM tab's checkbox list was unusable once the taxonomy grew
 past ~200 AI-proposed entries — now filtered per-photo to official tags + whatever's actually linked to
 that photo, not the full list. Gallery got a "Seulement à vérifier" filter (`verifie_humain=false`) and a
 "Confiance basse d'abord" client-side sort (Postgres/alphabetical order doesn't match basse<moyenne<haute
@@ -186,7 +214,7 @@ detection prompt (`construirePrompt` in `detection_iv.js`) when present. First e
 the finding above: "Feu / Brûlure" is *never* an active fire in these photos — it's burn evidence (a hot
 spot or brownish halo, soot deposit trailing upward on the wall, a soot halo on the ceiling). This is the
 intended channel for correcting model blind spots discovered via human review, one tag at a time, without
-touching code — EkoMa's taxonomy CRUD (IVQ tab) should eventually expose an edit field for it too (not
+touching code — EkoMa's taxonomy CRUD (IRUM tab) should eventually expose an edit field for it too (not
 built yet, currently DB-only via SQL).
 
 **Human-verification workflow "VerIA" (decided 2026-09-02)**: for spot-checking a specific detection
@@ -195,24 +223,27 @@ the photo — reuses the existing Incident_Reports/Incident_Report_Tags pipeline
 Excel trail, so findings stay structured and query-able (e.g. for a future AI-vs-human comparison).
 Mechanics: a virtual sanitaire `UB-VERIA` in `SanitaryBlocks_Inventory` (`Exists=false`, so invisible to
 real SpotSan users; geocoded at Gilles's own address, 76 avenue de Thouars, 33400 Talence — doesn't
-functionally matter since this route bypasses SpotSan's proximity check entirely). EkoMa's IVQ tab got a
+functionally matter since this route bypasses SpotSan's proximity check entirely). EkoMa's IRUM tab got a
 "+ Ajouter pour vérification humaine" button (local file picker + tag checkboxes + free-text remark →
 uploads straight to the `PointSan-Incidents` bucket under `UB-VERIA/` and inserts the
 Incident_Reports/Incident_Report_Tags rows) so Gilles never has to go through SpotSan's mobile flow for
-this. Findable and editable from *either* the IVQ tab or the pre-existing Modération tab (built
+this. Findable and editable from *either* the IRUM tab or the pre-existing Modération tab (built
 2026-08-29, search-a-sanitaire-then-see-its-fiches) — both share the same `renderIncidentRow` component,
 so there's no separate/duplicate UI to maintain for this.
 
-**Photo source (decided 2026-08-30)**: IVQ consumes the I&V photos already captured by SpotSan's
+**Photo source (decided 2026-08-30)**: IRUM consumes the IVER photos already captured by SpotSan's
 "Signaler une Incivilité ou un Vandalisme" flow — SpotSan's core business purpose for UrBizia *is*
 building this training dataset (see the general rules file, data-collection principle). Not a separate
 collection effort. Bootstrapped today with ~100 photos taken manually before SpotSan existed, added by
 Gilles. Plan: once the detection approach is validated, Gilles intends to tour all public sanitaires in
 the Bordeaux area in the coming weeks specifically to bulk-collect more example photos via SpotSan.
 
-**Admin UI (decided 2026-08-30)**: no standalone app for IVQ — settings/results/anything IVQ needs to
-expose to a human goes under EkoMa, `Administration > SitInZen > IVQ` (see the general rules file,
-Architecture des IHM). Not a separate app like SpotSan.
+**Admin UI (decided 2026-08-30, revised 2026-09-03)**: originally no standalone app for IVQ —
+everything went under EkoMa, `Administration > SitInZen > IVQ`. Revised 2026-09-03: IRUM now has its
+own independent Svelte/Vite app (`app/`, deployed to `gibruga.github.io/IRUM/`), mirroring FBS/RFQ/
+SpotSan's pattern — see "Admin app (independent repo, 2026-09-03)" below. Intended to be re-attached
+under EkoMa's `Administration > SitInZen` menu once mature; EkoMa's own IRUM tab stays in the meantime
+for the review workflows not yet ported (VerIA upload, EXIF export).
 
 Still open: where qualified démérite results get stored (own table? feeds into HiKleen/EkoMa alerting?),
 and whether phase-1 vision-LLM calls go through the Anthropic API directly or some other path.
@@ -220,9 +251,9 @@ and whether phase-1 vision-LLM calls go through the Anthropic API directly or so
 **Data pipeline built (2026-08-30)**: `Incivilites_Taxonomie` (shared reference table, replaces the old
 hardcoded 12-item lists duplicated in SpotSan/EkoMa; public read, admin-only write via
 `has_tool_access('fbs','admin')`) and `Incident_Report_Tags` (junction table — multi-tag per photo, a
-single incident photo can carry several I&V types at once). RPC `signaler_incivilite` updated to
+single incident photo can carry several IVER types at once). RPC `signaler_incivilite` updated to
 `p_tags text[]`. SpotSan's report form is multi-select (was single-select). EkoMa got a new admin tab
-(`Administration > SitInZen > IVQ`, flat tab for now — the general rule's `SitInZen > <Module>` nesting
+(`Administration > SitInZen > IRUM`, flat tab for now — the general rule's `SitInZen > <Module>` nesting
 isn't built as real UI nesting yet, revisit if a second SitInZen module needs it) with: photo gallery +
 inline multi-tag correction (signed URLs against the private `PointSan-Incidents` bucket), taxonomy
 CRUD (soft-deactivate only, never hard-delete a tag — would orphan historical taggings), and a
@@ -234,7 +265,7 @@ Local working copy of sample photos: `D:\UrBizia - Anthropic\I&V\` (not the Supa
 stays private deliberately, to prevent third-party scraping of the training set; Gilles copies photos
 there by hand, that's the agreed channel for Claude to actually look at real photos).
 
-**Legacy data still needing manual correction** (use the new EkoMa IVQ tab): `Incident_Reports` rows
+**Legacy data still needing manual correction** (use the new EkoMa IRUM tab): `Incident_Reports` rows
 5, 7, 8, 11, 13 have no tag yet — row 5's source text was garbled ("Taf + auticilanr"), rows 7/8/13 are
 ambiguously "Salissures" (`Salissures volontaires` vs `Défaut de nettoyage`, needs the actual photo to
 judge), row 11 originally had two free-text tags at once (now exactly what the junction table supports,
@@ -246,6 +277,29 @@ just needs Gilles to check both boxes).
   is fine for code identifiers.
 - Follows the shared UrBizia stack: GitHub (`GiBruGa` account) + Supabase project `UrBizia-DataWareHouse`
   (`mnsfstjgrueyuvejfvvk`) unless a good reason emerges to do otherwise.
-- Visual identity: registered in `acronymes` (id=`IVQ`, categorie=`Identite_Visuelle`, ordre=10,
-  couleur=`#540E28` matching the SitInZen family). No icon (`icon_svg`) supplied yet — placeholder,
-  same convention as other not-yet-iconed rows in that table.
+- Visual identity: registered in `acronymes` (id=`IRUM`, categorie=`Identite_Visuelle`, ordre=10,
+  couleur=`#540E28` matching the SitInZen family; row was id=`IVQ` before the 2026-09-03 rename). No
+  icon (`icon_svg`) supplied yet — placeholder, same convention as other not-yet-iconed rows in that
+  table.
+
+## Admin app (independent repo, 2026-09-03)
+
+`app/` is IRUM's own Svelte 5 + Vite admin UI, gated behind EkoMa's Supabase Auth session via the
+shared `initEkoGate` (see `EkoMa/auth-gate.js`, tool key `irum`) — same pattern as FBS/RFQ. Deployed
+via GitHub Actions (`.github/workflows/deploy.yml`, root-level, `working-directory: app`) to
+`gibruga.github.io/IRUM/` on push to `app/**`. Local dev: `.claude/launch.json` config `irum-app`
+(port 5174).
+
+**Catalogue Tag IVER** (`app/src/lib/Catalogue.svelte`): two-column drag-and-drop UI (Actifs / En
+attente) for `Incivilites_Taxonomie` — only "Actifs" tags are exposed to SpotSan end-users, search bar
+to avoid near-duplicate tags, 🆕 badge for AI-proposed (`propose_par_ia`) entries.
+
+**Pondération** (planned, not yet built): review bandeau for photos needing expert arbitration.
+"En litige" status must be *derived automatically*, never manually flagged — either (a) a mismatch
+between user-declared and AI-declared tags, or (b) a systematic 1-in-10 statistical sample of AI
+evaluations. Needs full photo browsing by date/sanitaire; per-photo view shows user tags
+(confirmed-by-IA / en litige) and, for litige cases, what the IA added vs removed relative to the
+user's declaration, then a human (pondérateur) decides what's retained — with a search against the
+tag catalogue before activating any new tag. Data model: each tag carries up to 3 "opinions"
+(Utilisateur / IA / Pondérateur) — a tag becomes "officiel" by default when Utilisateur and IA agree
+(recoupé); on disagreement (incohérence), the Pondérateur's call is final.
