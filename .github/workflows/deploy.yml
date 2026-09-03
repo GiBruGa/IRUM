@@ -5,7 +5,7 @@ name: Build & deploy (GitHub Pages)
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths: ['app/**']
   workflow_dispatch:
 
