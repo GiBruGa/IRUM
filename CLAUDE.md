@@ -151,6 +151,22 @@ satisfy `Incident_Report_Tags.tag`'s foreign key) — EkoMa's IVQ tab flags thes
 these and decide whether to keep/rename/formalize them into SpotSan's default list, per his own call —
 Claude doesn't promote a proposed tag to "official" on its own.
 
+**Preserve the AI's original diagnosis, separate from human correction (2026-09-03)**: `Incident_Reports`
+got `tags_ia_origine text[]`, snapshotted once at insert time by `detection_iv.js` and never touched again
+— `Incident_Report_Tags` (edited via EkoMa's moderation modal) is the *current/corrected* state, so a
+human edit no longer erases what the AI actually said. Necessary, not optional: without both states there
+is no way to measure AI accuracy, mine recurring error patterns to improve the prompt (as already done
+for "Feu / Brûlure"), or build a real training/eval set for a future self-hosted model — all three are
+already-stated goals of this chantier. EkoMa's moderation fiche shows the frozen AI diagnosis (tags +
+confiance) read-only above the editable checkboxes.
+
+**Review-queue usability (2026-09-03)**: the IVQ tab's checkbox list was unusable once the taxonomy grew
+past ~200 AI-proposed entries — now filtered per-photo to official tags + whatever's actually linked to
+that photo, not the full list. Gallery got a "Seulement à vérifier" filter (`verifie_humain=false`) and a
+"Confiance basse d'abord" client-side sort (Postgres/alphabetical order doesn't match basse<moyenne<haute
+severity), both as module-level toggles surviving tab switches. Vignettes show a small confidence dot
+(rouge=basse/orange=moyenne/vert=haute) in addition to the existing verified/unverified badge.
+
 **SDK gotcha (installed `@anthropic-ai/sdk` 0.70.1)**: `zodOutputFormat`/`output_config.format` from the
 skill's cached docs don't exist in this version — the real path is `betaZodOutputFormat` from
 `@anthropic-ai/sdk/helpers/beta/zod`, used via `client.beta.messages.parse({..., output_format: ...})`.
