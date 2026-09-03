@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IVQ</title>
+  <style>
+    body { margin: 0; background: #0f0f10; color: #e8e6e6; font-family: system-ui, sans-serif; }
+    #auth-overlay {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: #0f0f10; z-index: 1000; flex-direction: column; gap: 10px; text-align: center; padding: 20px;
+    }
+    #auth-error { color: #f87171; font-size: 13px; }
+    .auth-btn {
+      background: #c55a7a; color: #fff; border: none; border-radius: 8px; padding: 10px 18px;
+      font-size: 14px; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <!-- Gate d'acces partagee (voir EkoMa/auth-gate.js) : contrat DOM minimal
+       #auth-overlay/#auth-checking/#auth-denied/#auth-error, meme pattern
+       que FBS/RFQ. IVQ n'a pas encore d'ecran de connexion propre -- tant
+       qu'il n'est pas rattache a EkoMa (menu Administration), l'acces passe
+       par une session EkoMa deja ouverte dans le meme navigateur. -->
+  <div id="auth-overlay">
+    <div id="auth-checking">Vérification de l'accès…</div>
+    <div id="auth-denied" style="display:none">
+      <p id="auth-error"></p>
+      <p>Connectez-vous d'abord sur <strong>EkoMa</strong>, puis revenez ici.</p>
+      <a class="auth-btn" href="https://gibruga.github.io/EkoMa/">Aller sur EkoMa</a>
+    </div>
+  </div>
+
+  <div id="app"></div>
+
+  <!-- auth-gate.js prend le client Supabase en parametre (voir main.js) --
+       pas besoin du SDK Supabase via CDN ici, l'app en a sa propre copie
+       bundlee par Vite (import npm classique). -->
+  <script src="https://gibruga.github.io/EkoMa/auth-gate.js"></script>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
