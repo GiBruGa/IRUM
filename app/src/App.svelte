@@ -1,15 +1,11 @@
 <script>
   import Catalogue from './lib/Catalogue.svelte'
   import Ponderation from './lib/Ponderation.svelte'
-  import { supabase } from './lib/supabaseClient.js'
 
-  let { user } = $props()
+  // Pas de session/compte pour l'instant (voir main.js) -- donc pas de
+  // user.email/déconnexion a afficher ici tant que la gate n'est pas
+  // reintroduite.
   let onglet = $state('catalogue')
-
-  async function deconnexion() {
-    await supabase.auth.signOut()
-    location.reload()
-  }
 </script>
 
 <div class="app">
@@ -19,10 +15,6 @@
       <button class:actif={onglet === 'catalogue'} onclick={() => (onglet = 'catalogue')}>Catalogue Tag IVER</button>
       <button class:actif={onglet === 'ponderation'} onclick={() => (onglet = 'ponderation')}>Pondération</button>
     </nav>
-    <div class="user">
-      <span>{user.email}</span>
-      <button class="lien" onclick={deconnexion}>Déconnexion</button>
-    </div>
   </header>
 
   <main>
@@ -45,6 +37,4 @@
   }
   nav button.actif { background: #c55a7a; border-color: #c55a7a; color: #fff; }
   nav button:disabled { opacity: 0.4; cursor: default; }
-  .user { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 0.8rem; color: #999; }
-  .lien { background: none; border: none; color: #c55a7a; cursor: pointer; font-size: 0.8rem; padding: 0; }
 </style>
