@@ -252,7 +252,7 @@ async function enregistrerDansSupabase(cheminImage, resultat, modele, tempsMs, t
       'Content-Type': 'application/json',
       Prefer: 'return=representation',
     },
-    body: JSON.stringify({ UB_id: UB_ID_DETECTIONS, Photo: cheminStockage, Description: description, verifie_humain: false, confiance_ia: resultat.confiance }),
+    body: JSON.stringify({ UB_id: UB_ID_DETECTIONS, Photo: cheminStockage, Description: description, verifie_humain: false, confiance_ia: resultat.confiance, tags_ia_origine: resultat.tags }),
   });
   if (!insRes.ok) throw new Error(`insert Incident_Reports HTTP ${insRes.status} : ${await insRes.text()}`);
   const [ligne] = await insRes.json();
