@@ -294,12 +294,26 @@ via GitHub Actions (`.github/workflows/deploy.yml`, root-level, `working-directo
 attente) for `Incivilites_Taxonomie` — only "Actifs" tags are exposed to SpotSan end-users, search bar
 to avoid near-duplicate tags, 🆕 badge for AI-proposed (`propose_par_ia`) entries.
 
-**Pondération** (planned, not yet built): review bandeau for photos needing expert arbitration.
-"En litige" status must be *derived automatically*, never manually flagged — either (a) a mismatch
-between user-declared and AI-declared tags, or (b) a systematic 1-in-10 statistical sample of AI
-evaluations. Needs full photo browsing by date/sanitaire; per-photo view shows user tags
-(confirmed-by-IA / en litige) and, for litige cases, what the IA added vs removed relative to the
-user's declaration, then a human (pondérateur) decides what's retained — with a search against the
-tag catalogue before activating any new tag. Data model: each tag carries up to 3 "opinions"
-(Utilisateur / IA / Pondérateur) — a tag becomes "officiel" by default when Utilisateur and IA agree
-(recoupé); on disagreement (incohérence), the Pondérateur's call is final.
+**Pondération (built 2026-09-03)**: `app/src/lib/Ponderation.svelte` + `DetailPhoto.svelte`. Review
+bandeau for photos needing expert arbitration. "En litige" is *derived automatically*, never manually
+flagged (`estLitige()` in `Ponderation.svelte`) — either (a) a mismatch between `tags_utilisateur` and
+`tags_ia_origine` on the same `Incident_Reports` row, or (b) a systematic 1-in-10 sample among rows
+that went through AI detection, using `Report_id` (a monotonic sequence) as the "compteur" rather than
+a dedicated column. Filterable by sanitaire (`UB_id` search) and date range for full browsing, with an
+"en litige seulement" toggle (default on). Per-photo detail (`DetailPhoto.svelte`) shows the frozen AI
+diagnosis and the user declaration side by side, and — only when both exist — a 3-way diff (confirmé /
+ajouté par l'IA / retiré par l'IA); the editable decision starts from the current `Incident_Report_Tags`
+state (not recomputed from scratch, so it never silently discards an earlier human correction), with a
+tag-catalogue search before creating any new tag (mirrors Catalogue's anti-duplicate pattern) and
+`Incivilites_Taxonomie` insert-on-create for genuinely new tags (required by `Incident_Report_Tags.tag`'s
+foreign key, same as `detection_iv.js`'s auto-registration).
+
+**Known gap (found while building, 2026-09-03)**: `tags_utilisateur` exists on every row but is 0/1077
+populated today — the SpotSan user-reporting pipeline and the IRUM bulk AI-detection pipeline
+(`UB-DETECIA`) are still two disjoint flows over different photos, not the same photo evaluated by both.
+So litige mode (a) will surface nothing until AI detection also runs against real user-submitted
+signalements; only mode (b) (the 1/10 sample) populates the queue for now. The code is written correctly
+for when that gap closes — not a bug, just not wired up yet. Data model as specified: each tag carries up
+to 3 "opinions" (Utilisateur = `tags_utilisateur`, IA = `tags_ia_origine`, Pondérateur = the edited
+`Incident_Report_Tags`) — "officiel" by default when Utilisateur and IA agree (recoupé); on disagreement
+(incohérence), the Pondérateur's saved decision is final.
