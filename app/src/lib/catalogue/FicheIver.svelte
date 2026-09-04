@@ -88,12 +88,15 @@
   .champ-case { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #e8e6e6; cursor: pointer; }
   .erreur { color: #f87171; font-size: 0.78rem; margin: 0; }
   .actions { display: flex; gap: 8px; }
+  /* Charte graphique §7 (2026-09-04) : jamais de fond plein par defaut sur
+     un bouton d'action -- le fond reste neutre, seule la couleur du texte
+     distingue banal (neutre) de mis en exergue (#C55A7A). */
   .btn-enregistrer {
-    background: #c55a7a; border: none; color: #fff; border-radius: 999px; padding: 9px 16px;
+    background: #1a1a1c; border: 1px solid #333; color: #e8e6e6; border-radius: 999px; padding: 9px 16px;
     cursor: pointer; font-size: 0.85rem; font-weight: 600;
   }
   .btn-supprimer {
-    background: none; border: 1px solid #7f1d1d; color: #f87171; border-radius: 999px; padding: 9px 16px;
+    background: #1a1a1c; border: 1px solid #c55a7a; color: #c55a7a; border-radius: 999px; padding: 9px 16px;
     cursor: pointer; font-size: 0.85rem; font-weight: 600;
   }
   .btn-enregistrer:disabled, .btn-supprimer:disabled { opacity: 0.5; cursor: default; }

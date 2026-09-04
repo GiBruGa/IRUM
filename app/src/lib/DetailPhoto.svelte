@@ -201,7 +201,7 @@
 
   <div class="actions">
     <button class="btn" onclick={onFermer} disabled={enregistrement}>Annuler</button>
-    <button class="btn primary" onclick={enregistrer} disabled={enregistrement}>{enregistrement ? 'Enregistrement…' : 'Enregistrer'}</button>
+    <button class="btn" onclick={enregistrer} disabled={enregistrement}>{enregistrement ? 'Enregistrement…' : 'Enregistrer'}</button>
   </div>
 </div>
 
@@ -246,7 +246,8 @@
   .chk { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #e8e6e6; cursor: pointer; }
   .erreur { color: #f87171; font-size: 0.8rem; }
   .actions { display: flex; gap: 8px; justify-content: flex-end; }
+  /* Charte graphique §7 (2026-09-04) : jamais de fond plein par defaut --
+     Enregistrer reste banal (texte neutre), pas de traitement "deja actif". */
   .btn { background: #1a1a1c; border: 1px solid #333; color: #e8e6e6; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 0.85rem; }
-  .btn.primary { background: #c55a7a; border-color: #c55a7a; color: #fff; }
   .btn:disabled { opacity: 0.5; cursor: default; }
 </style>
