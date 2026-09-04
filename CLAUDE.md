@@ -432,8 +432,13 @@ record of which tag applied. Resolved same day, three migrations:
    the `tag` FK to `on delete set null`.
 
 `Catalogue.svelte`'s `supprimerTag()` simplified back down accordingly — no more catching a
-foreign-key-violation error, deletion just works and detaches cleanly. The Actif checkbox stays as the
-lighter-weight alternative (hide from new classifications without deleting), not a requirement anymore.
+foreign-key-violation error, deletion just works and detaches cleanly.
+
+**Actif checkbox removed again, same day**: added to Fiche IVER as the delete-alternative above, then
+immediately called redundant by Gilles now that (a) delete genuinely works and (b) `propose_utilisateur`
+already answers "should this be offered" for the case that actually matters (SpotSan's picker). Pulled
+back out of `FicheIver.svelte` — the `actif` column and its other consumers (`detection_iv.js`'s
+`chargerTaxonomie()` filter, `TreeNode.svelte`'s dimming) are untouched, just no UI writes it anymore.
 
 **Reordonner comme frère, pas seulement "devenir enfant" (2026-09-04)**: `TreeNode.svelte` only
 supported dropping *onto* a row (always reparents as a child) — no way to just reorder without changing
