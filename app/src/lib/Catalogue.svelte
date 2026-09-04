@@ -165,6 +165,49 @@
     } catch (e) { erreur = e.message }
   }
 
+  // Reordonner comme frere (avant/apres une cible), sans devenir son enfant
+  // -- gap signale par Gilles, 2026-09-04 : avant, seul "devenir enfant"
+  // existait au depot. Renumerote toute la fratrie (pas seulement le noeud
+  // deplace) puisque inserer au milieu decale la position de chacun.
+  async function reordonner(tagDeplace, cibleTag, avant) {
+    if (tagDeplace === cibleTag) return
+    const noeud = parTag.get(tagDeplace)
+    const cible = parTag.get(cibleTag)
+    if (!noeud || !cible) return
+    let v = cible.parent_tag
+    while (v) { if (v === tagDeplace) { erreur = 'Impossible : cible dans sa propre descendance.'; return }; v = parTag.get(v)?.parent_tag }
+
+    const nouveauParentTag = cible.parent_tag
+    const nouvelleCategorie = cible.categorie_iver
+    const clePrefixeParent = nouveauParentTag ? parTag.get(nouveauParentTag)?.cle : nouvelleCategorie
+
+    const fratrieBrute = nouveauParentTag
+      ? (enfantsParTag[nouveauParentTag] || [])
+      : taxonomie.filter((t) => t.categorie_iver === nouvelleCategorie && !t.parent_tag)
+    const fratrie = fratrieBrute.filter((t) => t.tag !== tagDeplace).sort((a, b) => a.ordre - b.ordre)
+    const indexCible = fratrie.findIndex((t) => t.tag === cibleTag)
+    fratrie.splice(avant ? indexCible : indexCible + 1, 0, noeud)
+
+    const enfantsRef = { ...enfantsParTag, [nouveauParentTag]: [...(enfantsParTag[nouveauParentTag] || [])] }
+    const majCles = []
+    fratrie.forEach((frere, i) => {
+      majCles.push(...renumeroterSousArbre(frere, clePrefixeParent, i + 1, enfantsRef))
+    })
+
+    try {
+      await majOuErreur(supabase
+        .from('Incivilites_Taxonomie')
+        .update({ parent_tag: nouveauParentTag, categorie_iver: nouvelleCategorie })
+        .eq('tag', tagDeplace))
+      for (let i = 0; i < fratrie.length; i++) {
+        const { error } = await supabase.from('Incivilites_Taxonomie').update({ ordre: i + 1 }).eq('tag', fratrie[i].tag)
+        if (error) throw error
+      }
+      await ecrireCles(majCles)
+      await charger()
+    } catch (e) { erreur = e.message }
+  }
+
   async function promouvoir(tagIA, categorieCode) {
     const noeud = parTag.get(tagIA)
     if (!noeud) return
@@ -194,6 +237,7 @@
   function surGlisserDeposeArbre(action) {
     erreur = ''
     if (action.type === 'reparent') reparenter(action.tag, action.cibleTag)
+    else if (action.type === 'reordonner') reordonner(action.tag, action.cibleTag, action.avant)
     else if (action.type === 'equivalence') declarerEquivalence(action.texteIa, action.cibleTag)
   }
 
@@ -225,10 +269,15 @@
   }
 
   async function supprimerTag(tag) {
-    // Les photos deja taguees protegent naturellement contre la suppression
-    // (Incident_Report_Tags.tag -> Incivilites_Taxonomie.tag, ON DELETE
-    // par defaut = NO ACTION) : Postgres refuse avec une erreur claire si ce
-    // tag est deja utilise sur une photo, plutot que de casser l'historique.
+    // Suppression reellement definitive (2026-09-04, decide avec Gilles) :
+    // Incident_Report_Tags.tag -> Incivilites_Taxonomie.tag est ON DELETE
+    // SET NULL (apres restructuration de la PK -- tag ne peut plus faire
+    // partie d'une cle primaire composite pour etre nullable). Sans danger
+    // pour l'historique car cle_enregistree/label_enregistre est deja
+    // rempli sur 100% des lignes existantes (rattrapage "0.N" pour le passif
+    // d'avant le systeme de cles, cf. migration cle_legacy_par_photo) --
+    // l'affichage d'une vieille photo ne depend plus jamais de ce que "tag"
+    // vaut aujourd'hui.
     await majOuErreur(supabase.from('Incivilites_Taxonomie').delete().eq('tag', tag))
     selection = null
     await charger()

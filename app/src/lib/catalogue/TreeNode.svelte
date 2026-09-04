@@ -14,7 +14,11 @@
 
   const estOuvert = $derived(ouverts.has(noeud.tag))
   const aDesEnfants = $derived(enfants.length > 0)
-  let survole = $state(false)
+  // 3 zones de depot dans la hauteur de la ligne : haut/bas = reordonner
+  // comme frere avant/apres, milieu = devenir enfant -- avant, seul "devenir
+  // enfant" existait, impossible de simplement reordonner (signale par
+  // Gilles, 2026-09-04).
+  let zone = $state(null) // 'avant' | 'enfant' | 'apres' | null
 
   function onDragStart(e) {
     e.dataTransfer.setData('text/x-irum-tag', noeud.tag)
@@ -22,15 +26,21 @@
   }
   function onDragOver(e) {
     e.preventDefault()
-    survole = true
+    const rect = e.currentTarget.getBoundingClientRect()
+    const ratio = (e.clientY - rect.top) / rect.height
+    zone = ratio < 0.3 ? 'avant' : ratio > 0.7 ? 'apres' : 'enfant'
   }
   function onDrop(e) {
     e.preventDefault()
-    survole = false
+    const zoneDepot = zone
+    zone = null
     const tagDeplace = e.dataTransfer.getData('text/x-irum-tag')
     const texteIa = e.dataTransfer.getData('text/x-irum-ia')
-    if (tagDeplace && tagDeplace !== noeud.tag) surGlisserDepose({ type: 'reparent', tag: tagDeplace, cibleTag: noeud.tag })
-    else if (texteIa) surGlisserDepose({ type: 'equivalence', texteIa, cibleTag: noeud.tag })
+    if (tagDeplace && tagDeplace !== noeud.tag) {
+      if (zoneDepot === 'avant') surGlisserDepose({ type: 'reordonner', tag: tagDeplace, cibleTag: noeud.tag, avant: true })
+      else if (zoneDepot === 'apres') surGlisserDepose({ type: 'reordonner', tag: tagDeplace, cibleTag: noeud.tag, avant: false })
+      else surGlisserDepose({ type: 'reparent', tag: tagDeplace, cibleTag: noeud.tag })
+    } else if (texteIa) surGlisserDepose({ type: 'equivalence', texteIa, cibleTag: noeud.tag })
   }
 </script>
 
@@ -38,13 +48,15 @@
   <div
     class="ligne"
     class:selectionne={selection === noeud.tag}
-    class:survole
+    class:survole-enfant={zone === 'enfant'}
+    class:survole-avant={zone === 'avant'}
+    class:survole-apres={zone === 'apres'}
     class:inactif={!noeud.actif}
     style:padding-left="{profondeur * 18}px"
     draggable="true"
     ondragstart={onDragStart}
     ondragover={onDragOver}
-    ondragleave={() => (survole = false)}
+    ondragleave={() => (zone = null)}
     ondrop={onDrop}
     onclick={() => surSelection(noeud.tag)}
     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); surSelection(noeud.tag) } }}
@@ -86,7 +98,9 @@
   }
   .ligne:hover { background: #1c1c1f; }
   .ligne.selectionne { background: #2a1620; border-color: #c55a7a; }
-  .ligne.survole { border-color: #c55a7a; background: #24151c; }
+  .ligne.survole-enfant { border-color: #c55a7a; background: #24151c; }
+  .ligne.survole-avant { border-top: 2px solid #c55a7a; }
+  .ligne.survole-apres { border-bottom: 2px solid #c55a7a; }
   .ligne.inactif { opacity: 0.45; }
   .bascule {
     background: none; border: none; color: #888; width: 14px; flex-shrink: 0; cursor: pointer;

@@ -397,7 +397,49 @@ latent risk and doesn't have this guard yet — worth the same fix if it turns o
 Also added: a **Supprimer** button in Fiche IVER (native `confirm()`, then deletes the
 `Incivilites_Taxonomie` row) — protected for free by existing FK behavior:
 `Incident_Report_Tags.tag → Incivilites_Taxonomie.tag` has no `ON DELETE` clause (defaults to `NO
-ACTION`), so Postgres refuses with a clear error if the tag is already used on a real photo, rather than
-silently orphaning history. A tag with children gets them promoted to root of the same category
-(`parent_tag` → null via `ON DELETE SET NULL`), not orphaned into "Non classé". Category headers in the
-tree are now plural ("Incivilités", "Vandalismes", "Défauts d'entretien", "Défauts de réparation").
+ACTION`), so Postgres refuses if the tag is already used on a real photo, rather than silently orphaning
+history — the raw Postgres FK error (`error.code === '23503'`) is caught in `supprimerTag()` and
+replaced with a plain-language message pointing at the **Actif** checkbox (re-added to Fiche IVER,
+2026-09-04 — dropped by mistake in the arborescence rewrite, this is how you "soft-delete" a tag that's
+already in use) as the real alternative. A tag with children gets them promoted to root of the same
+category (`parent_tag` → null via `ON DELETE SET NULL`), not orphaned into "Non classé". Category
+headers in the tree are now plural ("Incivilités", "Vandalismes", "Défauts d'entretien", "Défauts de
+réparation").
+
+**Hard-delete resolved (2026-09-04)**: Gilles asked whether a tag could be deleted for real, given the
+whole point of `cle_enregistree`/`label_enregistre` was "no retroactive effect." At the time, not quite
+true — those frozen columns were only written by `detection_iv.js`/`DetailPhoto.svelte` (both added
+that same day); every row from before, or written via EkoMa's moderation modal / SpotSan's
+`signaler_incivilite` RPC (neither updated to populate the snapshot), had the live `tag` FK as its only
+record of which tag applied. Resolved same day, three migrations:
+
+1. **`backfill_snapshot_tags_photos`**: every `Incident_Report_Tags` row missing a snapshot (2856/2856
+   at the time) got `cle_enregistree`/`label_enregistre` copied from the *current* live
+   `Incivilites_Taxonomie` row for its `tag` — not a true historical value (never existed), but the best
+   available, and it closes the gap in one pass.
+2. **`cle_legacy_par_photo`**: revised the `cle_enregistree` half of that backfill per Gilles's refinement
+   — a legacy `cle` should read as "from before the clé system existed," not borrow today's live
+   position (which implies a precision that isn't real). Namespaced `0.0`, `0.1`, `0.2`... **numbered per
+   photo** (`row_number() over (partition by report_id order by tag)`), not a stable per-tag mapping —
+   "unicité pour la photo en cours, mais pas de lien dans le temps" (two tags on the same photo never
+   collide; the same tag on two different photos can get different `0.N` values, deliberately — no
+   claimed continuity). `label_enregistre` untouched by this step, still the real tag text.
+3. **`incident_report_tags_surrogate_pk`**: `ON DELETE SET NULL` needs `tag` nullable, which was
+   impossible — `tag` was part of the composite primary key `(report_id, tag)`, and PK columns can't be
+   null. Added a surrogate `"Tag_id" bigint generated always as identity primary key` (named to match
+   the schema's `Report_id`/`UB_id` convention, not a generic `id` — Gilles's call), kept `(report_id,
+   tag)` as a plain `UNIQUE` constraint (same duplicate-tag-per-photo protection as before), then swapped
+   the `tag` FK to `on delete set null`.
+
+`Catalogue.svelte`'s `supprimerTag()` simplified back down accordingly — no more catching a
+foreign-key-violation error, deletion just works and detaches cleanly. The Actif checkbox stays as the
+lighter-weight alternative (hide from new classifications without deleting), not a requirement anymore.
+
+**Reordonner comme frère, pas seulement "devenir enfant" (2026-09-04)**: `TreeNode.svelte` only
+supported dropping *onto* a row (always reparents as a child) — no way to just reorder without changing
+depth, reported by Gilles. Fixed with a 3-zone drop target per row (top 30%/middle/bottom 30% of the
+row's height, via `dragover`'s `clientY` vs `getBoundingClientRect()`): top = insert as sibling before,
+bottom = insert as sibling after, middle = existing "become child" behavior. `Catalogue.svelte`'s new
+`reordonner()` renumbers the *whole* affected sibling group (not just the moved tag) — `renumeroterSousArbre()`
+per sibling, since inserting in the middle shifts every subsequent sibling's `cle` (and thus its
+descendants' `cle` prefixes) and `ordre`.

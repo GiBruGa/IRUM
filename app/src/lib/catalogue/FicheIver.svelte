@@ -4,6 +4,7 @@
   let label = $state(noeud.label)
   let remarques = $state(noeud.criteres_detection || '')
   let proposeUtilisateur = $state(noeud.propose_utilisateur || false)
+  let actif = $state(noeud.actif ?? true)
   let enregistrement = $state(false)
   let suppression = $state(false)
   let erreur = $state('')
@@ -12,6 +13,7 @@
     label = noeud.label
     remarques = noeud.criteres_detection || ''
     proposeUtilisateur = noeud.propose_utilisateur || false
+    actif = noeud.actif ?? true
     erreur = ''
   })
 
@@ -21,7 +23,7 @@
     enregistrement = true
     erreur = ''
     try {
-      await onEnregistrer(noeud.tag, { label: label.trim(), criteres_detection: remarques.trim() || null, propose_utilisateur: proposeUtilisateur })
+      await onEnregistrer(noeud.tag, { label: label.trim(), criteres_detection: remarques.trim() || null, propose_utilisateur: proposeUtilisateur, actif })
     } catch (e) {
       erreur = e.message
     } finally {
@@ -62,6 +64,14 @@
     <span>Retenu pour Utilisateurs Spot San</span>
   </label>
 
+  <label class="champ-case">
+    <input type="checkbox" bind:checked={actif} />
+    <span>Actif (proposé à l'IA pour de nouvelles classifications)</span>
+  </label>
+  {#if !actif}
+    <p class="note-inactif">Un tag inactif reste visible sur les photos déjà taguées avec — juste retiré des nouvelles propositions. C'est l'alternative à Supprimer quand ce dernier est bloqué (tag déjà utilisé).</p>
+  {/if}
+
   {#if erreur}<p class="erreur">{erreur}</p>{/if}
 
   <div class="actions">
@@ -86,6 +96,7 @@
     padding: 7px 10px; font-family: inherit; font-size: 0.85rem; resize: vertical;
   }
   .champ-case { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #e8e6e6; cursor: pointer; }
+  .note-inactif { font-size: 0.72rem; color: #999; margin: -4px 0 0; }
   .erreur { color: #f87171; font-size: 0.78rem; margin: 0; }
   .actions { display: flex; gap: 8px; }
   /* Charte graphique §7 (2026-09-04) : jamais de fond plein par defaut sur
