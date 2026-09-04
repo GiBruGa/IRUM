@@ -1,7 +1,7 @@
 <script>
   import { supabase } from './supabaseClient.js'
 
-  let { report, taxonomie, onFermer, urlPhoto } = $props()
+  let { report, taxonomie, equivalences, onFermer, urlPhoto } = $props()
 
   const tagsIa = $derived(report.tags_ia_origine || [])
   const tagsUt = $derived(report.tags_utilisateur || [])
@@ -26,6 +26,18 @@
   let enregistrement = $state(false)
   let erreur = $state('')
 
+  // Suggestion automatique (2026-09-04, demande de Gilles) : si un tag IA
+  // d'origine a une equivalence connue (declaree dans le Catalogue) qui n'est
+  // pas deja dans la decision courante, proposer l'application en un clic --
+  // ne touche rien tant que le pondérateur n'a pas clique et enregistre.
+  const equivalencesParTexte = $derived(new Map((equivalences || []).map((e) => [e.texte_ia, e.tag])))
+  const suggestionsEquivalence = $derived(
+    tagsIa
+      .map((t) => equivalencesParTexte.get(t))
+      .filter((tagOfficiel) => tagOfficiel && !selection.has(tagOfficiel))
+  )
+  function appliquerSuggestion(tag) { basculer(tag) }
+
   const rechercheNorm = $derived(recherche.trim().toLowerCase())
   const suggestions = $derived(
     taxonomie.filter((t) => !selection.has(t.tag) && (!rechercheNorm || t.tag.toLowerCase().includes(rechercheNorm)))
@@ -42,9 +54,11 @@
     const val = recherche.trim()
     if (!val || exactMatch) return
     const maxOrdre = taxonomie.reduce((m, t) => Math.max(m, t.ordre), 0)
-    const { error } = await supabase.from('Incivilites_Taxonomie').insert({ tag: val, ordre: maxOrdre + 1, actif: true })
+    const label = val.slice(0, 25)
+    const cle = `?.${val}`
+    const { error } = await supabase.from('Incivilites_Taxonomie').insert({ tag: val, ordre: maxOrdre + 1, actif: true, label, cle })
     if (error) { erreur = error.message; return }
-    taxonomie.push({ tag: val, actif: true, ordre: maxOrdre + 1, categorie_iver: null, propose_par_ia: false })
+    taxonomie.push({ tag: val, actif: true, ordre: maxOrdre + 1, categorie_iver: null, propose_par_ia: false, label, cle })
     basculer(val)
     recherche = ''
   }
@@ -66,7 +80,15 @@
         if (d.error) throw d.error
       }
       if (aAjouter.length) {
-        const i = await supabase.from('Incident_Report_Tags').insert(aAjouter.map((tag) => ({ report_id: report.Report_id, tag })))
+        // cle_enregistree/label_enregistre : copie figee au moment du tag,
+        // jamais une reference live -- voir Catalogue.svelte pour le principe.
+        const parTag = new Map(taxonomie.map((t) => [t.tag, t]))
+        const i = await supabase.from('Incident_Report_Tags').insert(aAjouter.map((tag) => ({
+          report_id: report.Report_id,
+          tag,
+          cle_enregistree: parTag.get(tag)?.cle ?? null,
+          label_enregistre: parTag.get(tag)?.label ?? null,
+        })))
         if (i.error) throw i.error
       }
       onFermer()
@@ -129,6 +151,17 @@
       <div class="diff-grp retire">
         <div class="diff-titre">Retiré par l'IA (déclaré par l'usager, non confirmé)</div>
         <div class="diff-liste">{retiresParIa.length ? retiresParIa.join(', ') : '—'}</div>
+      </div>
+    </div>
+  {/if}
+
+  {#if suggestionsEquivalence.length}
+    <div class="bloc suggestion-eq">
+      <div class="bloc-titre">Suggestion (équivalence connue depuis le Catalogue)</div>
+      <div class="chips">
+        {#each suggestionsEquivalence as tag}
+          <button class="chip suggere" onclick={() => appliquerSuggestion(tag)}>+ Appliquer « {tag} »</button>
+        {/each}
       </div>
     </div>
   {/if}
@@ -201,6 +234,8 @@
     font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
   }
   .chip.actif { background: #c55a7a; border-color: #c55a7a; color: #fff; }
+  .chip.suggere { border-color: #3b82f6; color: #93c5fd; }
+  .suggestion-eq { border-color: rgba(59,130,246,0.4); }
   .chip.nouveau { border-style: dashed; color: #c55a7a; border-color: #c55a7a; }
   .cat { font-size: 0.6rem; font-weight: 700; border-radius: 4px; padding: 0 4px; color: #fff; }
   .cat-I { background: #3b82f6; } .cat-V { background: #ef4444; } .cat-E { background: #f59e0b; } .cat-R { background: #8b5cf6; }

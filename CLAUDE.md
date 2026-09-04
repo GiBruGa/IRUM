@@ -290,9 +290,54 @@ via GitHub Actions (`.github/workflows/deploy.yml`, root-level, `working-directo
 `gibruga.github.io/IRUM/` on push to `app/**`. Local dev: `.claude/launch.json` config `irum-app`
 (port 5174).
 
-**Catalogue Tag IVER** (`app/src/lib/Catalogue.svelte`): two-column drag-and-drop UI (Actifs / En
-attente) for `Incivilites_Taxonomie` — only "Actifs" tags are exposed to SpotSan end-users, search bar
-to avoid near-duplicate tags, 🆕 badge for AI-proposed (`propose_par_ia`) entries.
+**Catalogue Tag IVER — refonte arborescence (2026-09-04)**: replaced the original flat two-column
+Actifs/En-attente UI with a real tree (`app/src/lib/Catalogue.svelte` + `catalogue/TreeNode.svelte` +
+`catalogue/FicheIver.svelte` + `catalogue/cle.js`). Design agreed with Gilles, three load-bearing
+principles:
+
+1. **The `clé` (e.g. `I.3.2`) is not a permanent identity — it's just an address in the current tree,
+   and it's expected to shift** when tags get reorganized. This is safe because of principle 2.
+2. **Never retroactive.** `Incident_Report_Tags` got `cle_enregistree`/`label_enregistre` (nullable) —
+   a *frozen snapshot* of the tag's clé+label written once at tagging time, never a live join to
+   `Incivilites_Taxonomie`. Renaming, reclassifying, or moving a tag in the Catalogue never touches a
+   single existing photo, no matter how many millions there eventually are — reordering only ever
+   writes to the taxonomy table itself (a few hundred rows), which is why this scales fine. A gap
+   between a photo's frozen label and that clé's current label in the live catalogue signals "this
+   came from an earlier version of the catalogue" — `Catalogue_Versions` (full JSON snapshots, taken via
+   the "💾 Sauvegarder le catalogue" button, titled with the save date) is where you'd go to look up
+   what a clé meant as of a given date, if that ever needs auditing.
+3. **No AI-suggested tag should stay in limbo.** The left column lists `propose_par_ia=true` rows
+   (excluded from the tree itself — showing up in both places would be redundant). Dragging one onto
+   an existing tree node declares an *equivalence* (`Tags_IA_Equivalences` table: free text → official
+   tag; the AI-proposed row is then set `actif=false, propose_par_ia=false`, absorbed, never deleted).
+   Dragging one onto a category (I/V/E/R) header instead *promotes* it directly as a new official node.
+   Equivalences feed back into `detection_iv.js`'s prompt (see below) so the AI stops re-proposing a
+   variant once it's been mapped, and into Pondération's arbitration screen as a one-click suggestion
+   (see below) — but never rewrite history on their own.
+
+Schema (migration `catalogue_iver_arborescence`, 2026-09-04): `Incivilites_Taxonomie` gained
+`parent_tag` (self-referencing, nullable — hierarchy under each I/V/E/R root, which stays a virtual
+grouping via `categorie_iver`, not real rows), `label` (≤25 chars, editable display name — `tag` itself
+stays the immutable internal identifier/FK target, never shown or renamed), `cle` (unique). Existing 345
+rows were backfilled as flat first-level children of their category (`label = tag`, `cle = "<catégorie>.<n>"`).
+New tables `Tags_IA_Equivalences` and `Catalogue_Versions` (RLS: public read on equivalences, `fbs`-admin
+write on both — same convention as the rest of this table family, see the `fbs`-vs-`irum` note in
+"Naming history"). Any code that inserts into `Incivilites_Taxonomie` must set `label`/`cle` (NOT NULL) —
+`detection_iv.js` and `DetailPhoto.svelte`'s "create new tag" path both use `label: tag.slice(0,25)`,
+`cle: "?.<tag>"` for on-the-fly AI-proposed rows (unclassified until dragged into the tree).
+
+Known Svelte gotcha hit while building this: an `$effect` that both reads and writes the same `$state`
+(here, the search-driven "auto-expand ancestors" effect reading `ouverts` via spread to merge into it)
+is an infinite loop in Svelte 5 — fixed by wrapping the write in `untrack()` so the effect depends only
+on the search term, not on its own prior output.
+
+**Equivalences wired into both consumers (2026-09-04)**: `detection_iv.js` gained `chargerEquivalences()`
+(reads `Tags_IA_Equivalences`, called alongside `chargerTaxonomie()` in `main()`), injected into
+`construirePrompt()` as a "these free-text variants mean X, use X instead" reminder block. `DetailPhoto.svelte`
+(Pondération) computes `suggestionsEquivalence` from the photo's `tags_ia_origine` against the same table
+and surfaces one-click "Appliquer « X »" chips above the tag decision — applying one only stages the
+change locally, same Enregistrer/Annuler flow as everything else in that panel, so principle 2 above still
+holds (nothing is retroactive until the pondérateur explicitly saves that specific photo).
 
 **Pondération (built 2026-09-03)**: `app/src/lib/Ponderation.svelte` + `DetailPhoto.svelte`. Review
 bandeau for photos needing expert arbitration. "En litige" is *derived automatically*, never manually

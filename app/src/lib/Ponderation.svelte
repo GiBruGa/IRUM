@@ -25,6 +25,7 @@
   let erreur = $state('')
   let reports = $state([])
   let taxonomie = $state([])
+  let equivalences = $state([])
   let limite = $state(PAGE)
 
   let litigeSeulement = $state(true)
@@ -46,12 +47,14 @@
     if (dateDe) requete = requete.gte('Reported_at', dateDe)
     if (dateA) requete = requete.lte('Reported_at', dateA + 'T23:59:59')
 
-    const [repRes, taxRes] = await Promise.all([
+    const [repRes, taxRes, eqRes] = await Promise.all([
       requete,
-      supabase.from('Incivilites_Taxonomie').select('tag,actif,ordre,categorie_iver,propose_par_ia,criteres_detection').order('ordre'),
+      supabase.from('Incivilites_Taxonomie').select('tag,actif,ordre,categorie_iver,propose_par_ia,criteres_detection,cle,label').order('ordre'),
+      supabase.from('Tags_IA_Equivalences').select('texte_ia,tag'),
     ])
     if (repRes.error) { erreur = repRes.error.message; chargement = false; return }
     taxonomie = taxRes.data || []
+    equivalences = eqRes.data || []
 
     const ids = (repRes.data || []).map((r) => r.Report_id)
     const tagsRes = ids.length
@@ -145,7 +148,7 @@
 </div>
 
 {#snippet detail(r)}
-  <DetailPhoto report={r} {taxonomie} onFermer={fermer} {urlPhoto} />
+  <DetailPhoto report={r} {taxonomie} {equivalences} onFermer={fermer} {urlPhoto} />
 {/snippet}
 
 <style>

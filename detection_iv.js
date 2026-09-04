@@ -91,7 +91,7 @@ function parseArgs() {
 
 async function chargerTaxonomie() {
   try {
-    const url = `${SUPABASE_URL}/rest/v1/Incivilites_Taxonomie?select=tag,criteres_detection,categorie_iver&actif=eq.true&order=ordre`;
+    const url = `${SUPABASE_URL}/rest/v1/Incivilites_Taxonomie?select=tag,criteres_detection,categorie_iver,cle,label&actif=eq.true&order=ordre`;
     const res = await fetch(url, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
     });
@@ -104,7 +104,23 @@ async function chargerTaxonomie() {
   return TAXONOMIE_REPLI;
 }
 
-function construirePrompt(taxonomie) {
+async function chargerEquivalences() {
+  // Table Tags_IA_Equivalences (2026-09-04) : variantes de texte libre deja
+  // vues par l'IA, associees par Gilles dans le Catalogue a un tag officiel.
+  // Reinjectees ici pour que l'IA arrete de reproposer la meme variante --
+  // jamais utilisee pour reecrire les Incident_Report_Tags existants.
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/Tags_IA_Equivalences?select=texte_ia,tag`;
+    const res = await fetch(url, { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    console.warn(`Avertissement : équivalences IA injoignables (${e.message}), prompt sans ce rappel.`);
+    return [];
+  }
+}
+
+function construirePrompt(taxonomie, equivalences) {
   // Les criteres_detection (retours de validation humaine, affinés au fil
   // des lots via l'onglet EkoMa > Administration > SitInZen > IRUM) sont
   // inclus quand ils existent -- c'est le canal pour corriger un angle mort
@@ -129,6 +145,13 @@ function construirePrompt(taxonomie) {
     return `${code} — ${libelle} :\n${liste}`;
   }).filter(Boolean).join('\n\n');
 
+  const rappelEquivalences = equivalences && equivalences.length
+    ? "\n\nRappel : les intitulés libres suivants ont déjà été proposés par le passé et sont " +
+      "en réalité équivalents à une qualification déjà listée ci-dessus — utilise directement " +
+      "la qualification officielle, ne repropose pas l'intitulé libre :\n" +
+      equivalences.map((e) => `  - "${e.texte_ia}" → ${e.tag}`).join('\n')
+    : '';
+
   return (
     "Tu analyses une photo de sanitaire public pour UrBizia. Examine-la successivement selon les " +
     "4 catégories IVER ci-dessous. Pour chaque catégorie, identifie zéro, une ou plusieurs des " +
@@ -139,13 +162,14 @@ function construirePrompt(taxonomie) {
     "et précis (2 à 5 mots, en français, cohérent avec le style des libellés ci-dessus) décrivant " +
     "exactement ce que tu observes.\n\n" +
     "Si la photo montre un sanitaire en état normal, sans aucun problème visible, réponds " +
-    "etat_normal=true et une liste de tags vide."
+    "etat_normal=true et une liste de tags vide." +
+    rappelEquivalences
   );
 }
 
 // Seul point d'appel au fournisseur d'IA — à réécrire ici uniquement si on
 // change de fournisseur (auto-hébergé, modèle maison...).
-async function classifierPhoto(client, modele, cheminImage, taxonomie) {
+async function classifierPhoto(client, modele, cheminImage, taxonomie, equivalences) {
   const ext = path.extname(cheminImage).toLowerCase();
   const mediaType = MEDIA_TYPES[ext];
   if (!mediaType) throw new Error(`extension non gérée : ${ext}`);
@@ -166,7 +190,7 @@ async function classifierPhoto(client, modele, cheminImage, taxonomie) {
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: mediaType, data: donnees } },
-        { type: 'text', text: construirePrompt(taxonomie) },
+        { type: 'text', text: construirePrompt(taxonomie, equivalences) },
       ],
     }],
     output_format: betaZodOutputFormat(ResultatSchema),
@@ -266,9 +290,11 @@ async function enregistrerDansSupabase(cheminImage, resultat, modele, tempsMs, t
     // propose_par_ia=true (revue humaine ensuite dans EkoMa, onglet IRUM,
     // pour décider de les garder/renommer/les ajouter à SpotSan) -- aussi
     // nécessaire pour satisfaire la clé étrangère sur Incident_Report_Tags.tag.
-    const connus = new Set(taxonomie.map((t) => t.tag));
+    const parTag = new Map(taxonomie.map((t) => [t.tag, t]));
     for (const tag of resultat.tags) {
-      if (connus.has(tag)) continue;
+      if (parTag.has(tag)) continue;
+      const label = tag.slice(0, 25);
+      const cle = `?.${tag}`;
       const insTax = await fetch(`${SUPABASE_URL}/rest/v1/Incivilites_Taxonomie?on_conflict=tag`, {
         method: 'POST',
         headers: {
@@ -277,16 +303,28 @@ async function enregistrerDansSupabase(cheminImage, resultat, modele, tempsMs, t
           'Content-Type': 'application/json',
           Prefer: 'resolution=ignore-duplicates',
         },
-        body: JSON.stringify({ tag, ordre: 999, actif: true, propose_par_ia: true }),
+        // label/cle sont NOT NULL depuis la refonte arborescence (2026-09-04) :
+        // pas de categorie ni de position dans l'arbre encore attribuees a ce
+        // stade (propose_par_ia=true, parent_tag=null) -- cle "?.<tag>" reste
+        // unique de facto (tag est deja unique) et signale "non classe" tant
+        // que Gilles ne l'a pas glisse dans le Catalogue.
+        body: JSON.stringify({ tag, ordre: 999, actif: true, propose_par_ia: true, label, cle }),
       });
       if (!insTax.ok) throw new Error(`insert Incivilites_Taxonomie (tag proposé "${tag}") HTTP ${insTax.status} : ${await insTax.text()}`);
-      connus.add(tag);
+      parTag.set(tag, { tag, cle, label });
     }
 
+    // cle_enregistree/label_enregistre : copie figee au moment du tag (jamais
+    // une reference live) -- voir Catalogue.svelte pour le principe complet.
     const insTags = await fetch(`${SUPABASE_URL}/rest/v1/Incident_Report_Tags`, {
       method: 'POST',
       headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(resultat.tags.map((tag) => ({ report_id: ligne.Report_id, tag }))),
+      body: JSON.stringify(resultat.tags.map((tag) => ({
+        report_id: ligne.Report_id,
+        tag,
+        cle_enregistree: parTag.get(tag)?.cle ?? null,
+        label_enregistre: parTag.get(tag)?.label ?? null,
+      }))),
     });
     if (!insTags.ok) throw new Error(`insert Incident_Report_Tags HTTP ${insTags.status} : ${await insTags.text()}`);
   }
@@ -336,7 +374,8 @@ async function main() {
   }
 
   const taxonomie = await chargerTaxonomie();
-  console.log(`${taxonomie.length} catégories chargées, ${photos.length} photo(s) à analyser avec ${args.modele}.`);
+  const equivalences = await chargerEquivalences();
+  console.log(`${taxonomie.length} catégories chargées (${equivalences.length} équivalence(s) IA connue(s)), ${photos.length} photo(s) à analyser avec ${args.modele}.`);
 
   const client = new Anthropic();
   const horodatage = new Date().toISOString().replace(/[:.]/g, '-');
@@ -354,7 +393,7 @@ async function main() {
     const photo = photos[i];
     const nom = path.basename(photo);
     try {
-      const { resultat, usage, tempsMs } = await classifierPhoto(client, args.modele, photo, taxonomie);
+      const { resultat, usage, tempsMs } = await classifierPhoto(client, args.modele, photo, taxonomie, equivalences);
       // Tout ce qui suit peut encore echouer (champ inattendu) -- ne compter
       // succes qu'une fois la ligne effectivement ecrite, pas avant.
       tempsTotal += tempsMs;
