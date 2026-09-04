@@ -59,7 +59,7 @@
 
   <label class="champ-case">
     <input type="checkbox" bind:checked={proposeUtilisateur} />
-    <span>Retenu pour Utilisateurs Spot San</span>
+    <span>Retenu pour Utilisateurs SpotSan</span>
   </label>
 
   {#if erreur}<p class="erreur">{erreur}</p>{/if}
