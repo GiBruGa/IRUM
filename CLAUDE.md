@@ -317,7 +317,7 @@ principles:
 
 Schema (migration `catalogue_iver_arborescence`, 2026-09-04): `Incivilites_Taxonomie` gained
 `parent_tag` (self-referencing, nullable — hierarchy under each I/V/E/R root, which stays a virtual
-grouping via `categorie_iver`, not real rows), `label` (≤25 chars, editable display name — `tag` itself
+grouping via `categorie_iver`, not real rows), `label` (≤50 chars, editable display name — `tag` itself
 stays the immutable internal identifier/FK target, never shown or renamed), `cle` (unique). Existing 345
 rows were backfilled as flat first-level children of their category (`label = tag`, `cle = "<catégorie>.<n>"`).
 New tables `Tags_IA_Equivalences` and `Catalogue_Versions` (RLS: public read on equivalences, `fbs`-admin
@@ -381,3 +381,23 @@ whether SpotSan's tag picker offers that tag at all. Backfilled `true` only for 
 curated tags (`actif=true and not propose_par_ia`); every AI-proposed tag defaults to hidden from users
 until deliberately curated in. `SpotSan/src/lib/incidents.js`'s `chargerTaxonomieIncivilites()` now
 filters on both `actif` and `propose_utilisateur`.
+
+**Fiche IVER: two real bugs fixed (2026-09-04)**: (1) `label` cap was 25 chars but real pre-existing
+labels routinely exceed that (backfill just copied `tag` verbatim, often 30+ chars) — Enregistrer's
+client-side length guard fired silently on any unedited long label, discarding the whole save (label,
+remarques, propose_utilisateur alike) with no visible error. Raised to 50 everywhere the cap is enforced
+(`FicheIver.svelte`, `detection_iv.js`, `DetailPhoto.svelte`'s inline tag creation). (2) A Postgres
+UPDATE blocked by RLS (no `fbs`-admin session — e.g. testing locally with no EkoMa login shared via
+`gibruga.github.io`) returns `error: null` and 0 rows changed, not an error — silently discarded the
+edit. `Catalogue.svelte` now has `majOuErreur()`, which appends `.select()` and throws a clear message
+("vérifie que tu es bien connecté sur EkoMa...") when nothing came back, used by every write in that
+file (reparent, promote, equivalence, Fiche save, delete). `DetailPhoto.svelte`/Pondération has the same
+latent risk and doesn't have this guard yet — worth the same fix if it turns out to bite there too.
+
+Also added: a **Supprimer** button in Fiche IVER (native `confirm()`, then deletes the
+`Incivilites_Taxonomie` row) — protected for free by existing FK behavior:
+`Incident_Report_Tags.tag → Incivilites_Taxonomie.tag` has no `ON DELETE` clause (defaults to `NO
+ACTION`), so Postgres refuses with a clear error if the tag is already used on a real photo, rather than
+silently orphaning history. A tag with children gets them promoted to root of the same category
+(`parent_tag` → null via `ON DELETE SET NULL`), not orphaned into "Non classé". Category headers in the
+tree are now plural ("Incivilités", "Vandalismes", "Défauts d'entretien", "Défauts de réparation").

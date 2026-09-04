@@ -1,10 +1,11 @@
 <script>
-  let { noeud, onEnregistrer } = $props()
+  let { noeud, onEnregistrer, onSupprimer } = $props()
 
   let label = $state(noeud.label)
   let remarques = $state(noeud.criteres_detection || '')
   let proposeUtilisateur = $state(noeud.propose_utilisateur || false)
   let enregistrement = $state(false)
+  let suppression = $state(false)
   let erreur = $state('')
 
   $effect(() => {
@@ -16,7 +17,7 @@
 
   async function enregistrer() {
     if (!label.trim()) { erreur = 'Le label ne peut pas être vide.'; return }
-    if (label.length > 25) { erreur = 'Le label doit faire au plus 25 caractères.'; return }
+    if (label.length > 50) { erreur = 'Le label doit faire au plus 50 caractères.'; return }
     enregistrement = true
     erreur = ''
     try {
@@ -27,6 +28,19 @@
       enregistrement = false
     }
   }
+
+  async function supprimer() {
+    if (!confirm(`Supprimer le tag « ${noeud.label} » (clé ${noeud.cle}) ? Cette action est définitive.`)) return
+    suppression = true
+    erreur = ''
+    try {
+      await onSupprimer(noeud.tag)
+    } catch (e) {
+      erreur = e.message
+    } finally {
+      suppression = false
+    }
+  }
 </script>
 
 <div class="fiche">
@@ -34,8 +48,8 @@
   <div class="champ-cle">Clé : <span>{noeud.cle}</span></div>
 
   <label class="champ">
-    <span>Label <span class="compteur">({label.length}/25)</span></span>
-    <input bind:value={label} maxlength="25" />
+    <span>Label <span class="compteur">({label.length}/50)</span></span>
+    <input bind:value={label} maxlength="50" />
   </label>
 
   <label class="champ">
@@ -45,15 +59,19 @@
 
   <label class="champ-case">
     <input type="checkbox" bind:checked={proposeUtilisateur} />
-    <span>Proposer aux utilisateurs (SpotSan) pour la classification des photos</span>
+    <span>Retenu pour Utilisateurs Spot San</span>
   </label>
-  <p class="aide">Décoché par défaut — ne pas montrer tout le catalogue aux usagers, sinon ils n'utilisent plus l'outil.</p>
 
   {#if erreur}<p class="erreur">{erreur}</p>{/if}
 
-  <button class="btn-enregistrer" onclick={enregistrer} disabled={enregistrement}>
-    {enregistrement ? 'Enregistrement…' : 'Enregistrer'}
-  </button>
+  <div class="actions">
+    <button class="btn-supprimer" onclick={supprimer} disabled={enregistrement || suppression}>
+      {suppression ? 'Suppression…' : 'Supprimer'}
+    </button>
+    <button class="btn-enregistrer" onclick={enregistrer} disabled={enregistrement || suppression}>
+      {enregistrement ? 'Enregistrement…' : 'Enregistrer'}
+    </button>
+  </div>
 </div>
 
 <style>
@@ -68,11 +86,15 @@
     padding: 7px 10px; font-family: inherit; font-size: 0.85rem; resize: vertical;
   }
   .champ-case { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #e8e6e6; cursor: pointer; }
-  .aide { font-size: 0.72rem; color: #666; margin: -6px 0 0; }
   .erreur { color: #f87171; font-size: 0.78rem; margin: 0; }
+  .actions { display: flex; gap: 8px; }
   .btn-enregistrer {
     background: #c55a7a; border: none; color: #fff; border-radius: 999px; padding: 9px 16px;
     cursor: pointer; font-size: 0.85rem; font-weight: 600;
   }
-  .btn-enregistrer:disabled { opacity: 0.5; cursor: default; }
+  .btn-supprimer {
+    background: none; border: 1px solid #7f1d1d; color: #f87171; border-radius: 999px; padding: 9px 16px;
+    cursor: pointer; font-size: 0.85rem; font-weight: 600;
+  }
+  .btn-enregistrer:disabled, .btn-supprimer:disabled { opacity: 0.5; cursor: default; }
 </style>

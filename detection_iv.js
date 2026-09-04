@@ -293,7 +293,7 @@ async function enregistrerDansSupabase(cheminImage, resultat, modele, tempsMs, t
     const parTag = new Map(taxonomie.map((t) => [t.tag, t]));
     for (const tag of resultat.tags) {
       if (parTag.has(tag)) continue;
-      const label = tag.slice(0, 25);
+      const label = tag.slice(0, 50);
       const cle = `?.${tag}`;
       const insTax = await fetch(`${SUPABASE_URL}/rest/v1/Incivilites_Taxonomie?on_conflict=tag`, {
         method: 'POST',

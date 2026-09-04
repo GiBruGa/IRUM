@@ -54,7 +54,7 @@
     const val = recherche.trim()
     if (!val || exactMatch) return
     const maxOrdre = taxonomie.reduce((m, t) => Math.max(m, t.ordre), 0)
-    const label = val.slice(0, 25)
+    const label = val.slice(0, 50)
     const cle = `?.${val}`
     const { error } = await supabase.from('Incivilites_Taxonomie').insert({ tag: val, ordre: maxOrdre + 1, actif: true, label, cle })
     if (error) { erreur = error.message; return }

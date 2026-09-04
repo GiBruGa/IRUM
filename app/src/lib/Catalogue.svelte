@@ -20,10 +20,10 @@
   //  - aucune de ces actions n'est retroactive sur Incident_Report_Tags.
 
   const CATEGORIES = [
-    { code: 'I', libelle: 'Incivilité' },
-    { code: 'V', libelle: 'Vandalisme' },
-    { code: 'E', libelle: "Défaut d'entretien" },
-    { code: 'R', libelle: 'Défaut de réparation' },
+    { code: 'I', libelle: 'Incivilités' },
+    { code: 'V', libelle: 'Vandalismes' },
+    { code: 'E', libelle: "Défauts d'entretien" },
+    { code: 'R', libelle: 'Défauts de réparation' },
   ]
 
   let taxonomie = $state([])
@@ -33,6 +33,21 @@
   let ouverts = $state(new Set())
   let selection = $state(null)
   let sauvegarde = $state(false)
+
+  // Un UPDATE Postgres filtre par une policy RLS qui echoue silencieusement
+  // -- pas d'erreur, juste 0 ligne modifiee (vu en test, 2026-09-04 : la
+  // Fiche IVER "enregistrait" sans rien changer). .select() force Supabase a
+  // renvoyer les lignes touchees, pour distinguer "vraiment enregistre" de
+  // "silencieusement refuse" et le signaler clairement plutot que de laisser
+  // croire que ca a marche.
+  async function majOuErreur(requete) {
+    const { data, error } = await requete.select()
+    if (error) throw error
+    if (!data || !data.length) {
+      throw new Error("Rien n'a été modifié — vérifie que tu es bien connecté sur EkoMa dans ce même navigateur (les écritures nécessitent une session partagée).")
+    }
+    return data
+  }
 
   async function charger() {
     chargement = true
@@ -140,11 +155,10 @@
     // renumeroterSousArbre recalcule aussi les enfants existants du noeud
     // deplace via enfantsParTag global -- deja coherent, pas besoin de refaire.
     try {
-      const { error: upErr } = await supabase
+      await majOuErreur(supabase
         .from('Incivilites_Taxonomie')
         .update({ parent_tag: cibleTag, ordre: nouvellePosition, categorie_iver: cible.categorie_iver })
-        .eq('tag', tagDeplace)
-      if (upErr) throw upErr
+        .eq('tag', tagDeplace))
       await ecrireCles(maj)
       ouverts = new Set([...ouverts, cibleTag])
       await charger()
@@ -157,11 +171,10 @@
     const position = racinesCategorie(categorieCode).length + 1
     const cle = calculerCle(categorieCode, position)
     try {
-      const { error: upErr } = await supabase
+      await majOuErreur(supabase
         .from('Incivilites_Taxonomie')
         .update({ parent_tag: null, categorie_iver: categorieCode, ordre: position, cle, propose_par_ia: false })
-        .eq('tag', tagIA)
-      if (upErr) throw upErr
+        .eq('tag', tagIA))
       await charger()
     } catch (e) { erreur = e.message }
   }
@@ -170,11 +183,10 @@
     try {
       const { error: eqErr } = await supabase.from('Tags_IA_Equivalences').insert({ texte_ia: texteIa, tag: cibleTag })
       if (eqErr) throw eqErr
-      const { error: upErr } = await supabase
+      await majOuErreur(supabase
         .from('Incivilites_Taxonomie')
         .update({ actif: false, propose_par_ia: false })
-        .eq('tag', texteIa)
-      if (upErr) throw upErr
+        .eq('tag', texteIa))
       await charger()
     } catch (e) { erreur = e.message }
   }
@@ -201,15 +213,24 @@
       // Deplacer un noeud existant directement en racine d'une categorie.
       const position = racinesCategorie(code).length + 1
       const cle = calculerCle(code, position)
-      supabase.from('Incivilites_Taxonomie').update({ parent_tag: null, categorie_iver: code, ordre: position, cle }).eq('tag', tagDeplace).then(({ error: e2 }) => {
-        if (e2) erreur = e2.message; else charger()
-      })
+      majOuErreur(supabase.from('Incivilites_Taxonomie').update({ parent_tag: null, categorie_iver: code, ordre: position, cle }).eq('tag', tagDeplace))
+        .then(() => charger())
+        .catch((e) => { erreur = e.message })
     }
   }
 
   async function enregistrerFiche(tag, valeurs) {
-    const { error: e2 } = await supabase.from('Incivilites_Taxonomie').update(valeurs).eq('tag', tag)
-    if (e2) throw e2
+    await majOuErreur(supabase.from('Incivilites_Taxonomie').update(valeurs).eq('tag', tag))
+    await charger()
+  }
+
+  async function supprimerTag(tag) {
+    // Les photos deja taguees protegent naturellement contre la suppression
+    // (Incident_Report_Tags.tag -> Incivilites_Taxonomie.tag, ON DELETE
+    // par defaut = NO ACTION) : Postgres refuse avec une erreur claire si ce
+    // tag est deja utilise sur une photo, plutot que de casser l'historique.
+    await majOuErreur(supabase.from('Incivilites_Taxonomie').delete().eq('tag', tag))
+    selection = null
     await charger()
   }
 
@@ -308,7 +329,7 @@
       <section class="col-fiche">
         {#if noeudSelectionne}
           {#key noeudSelectionne.tag}
-            <FicheIver noeud={noeudSelectionne} onEnregistrer={enregistrerFiche} />
+            <FicheIver noeud={noeudSelectionne} onEnregistrer={enregistrerFiche} onSupprimer={supprimerTag} />
           {/key}
         {:else}
           <p class="vide">Cliquez un tag dans l'arborescence pour voir sa fiche.</p>
