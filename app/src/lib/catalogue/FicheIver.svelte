@@ -3,12 +3,14 @@
 
   let label = $state(noeud.label)
   let remarques = $state(noeud.criteres_detection || '')
+  let proposeUtilisateur = $state(noeud.propose_utilisateur || false)
   let enregistrement = $state(false)
   let erreur = $state('')
 
   $effect(() => {
     label = noeud.label
     remarques = noeud.criteres_detection || ''
+    proposeUtilisateur = noeud.propose_utilisateur || false
     erreur = ''
   })
 
@@ -18,7 +20,7 @@
     enregistrement = true
     erreur = ''
     try {
-      await onEnregistrer(noeud.tag, { label: label.trim(), criteres_detection: remarques.trim() || null })
+      await onEnregistrer(noeud.tag, { label: label.trim(), criteres_detection: remarques.trim() || null, propose_utilisateur: proposeUtilisateur })
     } catch (e) {
       erreur = e.message
     } finally {
@@ -41,6 +43,12 @@
     <textarea bind:value={remarques} rows="4"></textarea>
   </label>
 
+  <label class="champ-case">
+    <input type="checkbox" bind:checked={proposeUtilisateur} />
+    <span>Proposer aux utilisateurs (SpotSan) pour la classification des photos</span>
+  </label>
+  <p class="aide">Décoché par défaut — ne pas montrer tout le catalogue aux usagers, sinon ils n'utilisent plus l'outil.</p>
+
   {#if erreur}<p class="erreur">{erreur}</p>{/if}
 
   <button class="btn-enregistrer" onclick={enregistrer} disabled={enregistrement}>
@@ -59,6 +67,8 @@
     background: #1a1a1c; border: 1px solid #333; border-radius: 8px; color: #e8e6e6;
     padding: 7px 10px; font-family: inherit; font-size: 0.85rem; resize: vertical;
   }
+  .champ-case { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #e8e6e6; cursor: pointer; }
+  .aide { font-size: 0.72rem; color: #666; margin: -6px 0 0; }
   .erreur { color: #f87171; font-size: 0.78rem; margin: 0; }
   .btn-enregistrer {
     background: #c55a7a; border: none; color: #fff; border-radius: 999px; padding: 9px 16px;

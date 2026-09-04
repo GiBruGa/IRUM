@@ -38,7 +38,7 @@
     chargement = true
     const { data, error } = await supabase
       .from('Incivilites_Taxonomie')
-      .select('tag,actif,ordre,categorie_iver,criteres_detection,propose_par_ia,parent_tag,label,cle')
+      .select('tag,actif,ordre,categorie_iver,criteres_detection,propose_par_ia,parent_tag,label,cle,propose_utilisateur')
       .order('ordre')
     if (error) { erreur = error.message; chargement = false; return }
     taxonomie = data || []
@@ -328,18 +328,22 @@
   .erreur { color: #f87171; }
   .info, .vide { color: #999; font-size: 0.85rem; }
 
-  .colonnes { display: grid; grid-template-columns: 220px 1fr 280px; gap: 1rem; align-items: start; }
-  @media (max-width: 900px) { .colonnes { grid-template-columns: 1fr; } }
+  /* Largeurs demandées par Gilles (2026-09-04) : IA x2 (220->440), Arborescence
+     x1.5 (etait 1fr, cf. poids relatif) -- Fiche inchangee (280px). */
+  .colonnes { display: grid; grid-template-columns: 440px 1.5fr 280px; gap: 1rem; align-items: start; }
+  @media (max-width: 1400px) { .colonnes { grid-template-columns: 1fr; } }
 
   .col-ia, .col-arbre, .col-fiche {
     background: #17171a; border: 1px solid #2a2a2d; border-radius: 10px; padding: 0.7rem;
   }
   h2 { font-size: 0.82rem; margin: 0 0 0.6rem; color: #e8e6e6; }
 
-  .liste-ia { display: flex; flex-direction: column; gap: 6px; max-height: 460px; overflow-y: auto; }
+  /* padding-right : les cartes en pointilles (border dashed) ne doivent pas
+     toucher l'ascenseur vertical (demande de Gilles, 2026-09-04). */
+  .liste-ia { display: flex; flex-direction: column; gap: 6px; max-height: 460px; overflow-y: auto; padding-right: 8px; }
   .carte-ia {
     background: #1f1f22; border: 1px dashed #c55a7a; color: #e8e6e6; border-radius: 8px;
-    padding: 6px 9px; font-size: 0.78rem; cursor: grab;
+    padding: 6px 9px; font-size: 0.78rem; cursor: grab; box-sizing: border-box;
   }
   .carte-ia:active { cursor: grabbing; }
 

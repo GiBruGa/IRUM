@@ -361,4 +361,23 @@ signalements; only mode (b) (the 1/10 sample) populates the queue for now. The c
 for when that gap closes — not a bug, just not wired up yet. Data model as specified: each tag carries up
 to 3 "opinions" (Utilisateur = `tags_utilisateur`, IA = `tags_ia_origine`, Pondérateur = the edited
 `Incident_Report_Tags`) — "officiel" by default when Utilisateur and IA agree (recoupé); on disagreement
-(incohérence), the Pondérateur's saved decision is final.
+(incohérence), the Pondérateur's saved decision is final. **Refined 2026-09-04** (see the general rules
+file, "Réconciliation IA/Usager via la position dans l'arborescence"): "recoupé" isn't strict string
+equality — an AI tag that's equivalent to or a more precise descendant of the user's tag in the
+Catalogue tree also counts as agreement. `estLitige()` doesn't implement this yet (still a plain string
+comparison) — no practical effect while `tags_utilisateur` stays empty, but needs doing before the two
+pipelines converge on the same photos.
+
+**Mise en forme + curation usager (2026-09-04)**: `App.svelte` wordmark now two-tone (`IRU`/`M`, charte
+graphique `--wm-strong`/`--wm-soft`) plus a footer "IRUM est un service UrBizia" with the UrBizia mark
+fetched live from `acronymes` (id `UrBizia`, same pattern as FBS — hardcoded SVG-in-code fallback, never
+a bare static file, per the charte's §2 and the EkoMa-favicon incident in `feedback-read-general-rules-first`).
+`.app` widened to 1700px; Catalogue's grid is now `440px 1.5fr 280px` (IA column ×2, arborescence ×1.5)
+with `padding-right` on the IA list so the dashed cards don't touch the scrollbar.
+
+Added `Incivilites_Taxonomie.propose_utilisateur` (default `false`) — see the general rules file,
+"Curation des tags proposés aux usagers" — a toggle in Fiche IVER, separate from `actif`, controlling
+whether SpotSan's tag picker offers that tag at all. Backfilled `true` only for the 19 pre-existing
+curated tags (`actif=true and not propose_par_ia`); every AI-proposed tag defaults to hidden from users
+until deliberately curated in. `SpotSan/src/lib/incidents.js`'s `chargerTaxonomieIncivilites()` now
+filters on both `actif` and `propose_utilisateur`.
