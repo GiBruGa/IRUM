@@ -89,15 +89,22 @@
   }
 
   // "A expertiser au total" = pas encore verifie par un humain, sur les
-  // memes filtres UB/date -- volontairement independant du calcul de litige
-  // (derive cote client depuis les tags, pas repliquable simplement en SQL
-  // pur) : Gilles voulait un vrai total, pas seulement ce qui est charge en
-  // cache (2026-09-11).
+  // memes filtres UB/date/litige que le bandeau -- Gilles voulait un vrai
+  // total, pas seulement ce qui est charge en cache (2026-09-11), *et* que
+  // ce total respecte bien "en litige seulement" (2026-09-11, suite).
+  // Passe par le RPC compter_a_expertiser() : le critere (b) de estLitige()
+  // (Report_id % 10 = 0) n'est pas exprimable via le query builder
+  // PostgREST du client JS (pas d'operateur modulo), donc calcule cote base
+  // -- reproduit fidelement les deux criteres de estLitige() ci-dessous.
   async function compterTotal() {
-    let req = supabase.from('Incident_Reports').select('Report_id', { count: 'exact', head: true }).eq('verifie_humain', false)
-    req = appliquerFiltres(req)
-    const { count } = await req
-    totalAExpertiser = count ?? null
+    const { data, error } = await supabase.rpc('compter_a_expertiser', {
+      p_litige_seulement: litigeSeulement,
+      p_ub: rechercheUb.trim() || null,
+      p_date_de: dateDe || null,
+      p_date_a: dateA || null,
+    })
+    if (error) { totalAExpertiser = null; return }
+    totalAExpertiser = data ?? null
   }
 
   let taxonomieChargee = false
@@ -253,7 +260,7 @@
   <div class="barre">
     <label class="chk">
       <input type="checkbox" bind:checked={litigeSeulement} onchange={charger} />
-      En litige seulement ({enrichis.filter((r) => r.litige).length})
+      En litige seulement
     </label>
     <input class="recherche" placeholder="Sanitaire (UB_id)…" bind:value={rechercheUb} onchange={charger} />
     <input type="date" bind:value={dateDe} onchange={charger} title="Du" />
@@ -282,12 +289,13 @@
 
     <div class="bandeau-vignettes">
       <div class="entete-vignettes">
-        <!-- Plus de compte "en cache" affiché (demande de Gilles, 2026-09-11) :
-             charger() complète maintenant automatiquement le bandeau jusqu'à
-             OBJECTIF_VIGNETTES pour le filtre courant, donc ce nombre ne
-             correspondait plus jamais à ce qui est réellement visible. -->
+        <!-- Seul compte affiché désormais (demande de Gilles, 2026-09-11) :
+             plus de doublon avec la case à cocher, ni de "X en cache" qui ne
+             correspondait jamais à ce qui est réellement visible -- et il
+             respecte bien le filtre "en litige seulement" en cours (via le
+             RPC compter_a_expertiser, cf. compterTotal() ci-dessus). -->
         <span>
-          {totalAExpertiser !== null ? `${totalAExpertiser} photo${totalAExpertiser > 1 ? 's' : ''} à expertiser au total` : '…'}
+          {totalAExpertiser !== null ? `${totalAExpertiser} photo${totalAExpertiser > 1 ? 's' : ''} à expertiser au total${litigeSeulement ? ' (en litige)' : ''}` : '…'}
         </span>
         {#if reports.length === limite}
           <button class="charger-plus" onclick={chargerPlus}>Charger un lot de plus</button>
