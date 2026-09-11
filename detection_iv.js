@@ -139,7 +139,12 @@ function construirePrompt(taxonomie, equivalences) {
     R: 'Défaut de Réparation (élément cassé/défaillant à réparer)',
   };
   const parCategorie = Object.entries(CATEGORIES).map(([code, libelle]) => {
-    const tags = taxonomie.filter((t) => t.categorie_iver === code);
+    // "Autre (...)" exclu du prompt (demande de Gilles, 2026-09-11) : c'est
+    // un choix par defaut acceptable pour l'usager SpotSan (qui ne sait pas
+    // forcement qualifier), jamais pour l'IA -- la lister comme une
+    // "qualification" valide sapait la consigne juste en dessous ("propose
+    // un intitule precis" au lieu d'un fourre-tout).
+    const tags = taxonomie.filter((t) => t.categorie_iver === code && !t.tag.startsWith('Autre'));
     if (!tags.length) return '';
     const liste = tags.map((t) => `  - ${t.tag}` + (t.criteres_detection ? ` (${t.criteres_detection})` : '')).join('\n');
     return `${code} — ${libelle} :\n${liste}`;

@@ -56,8 +56,13 @@
   function appliquerSuggestion(tag) { basculer(tag) }
 
   const rechercheNorm = $derived(recherche.trim().toLowerCase())
+  // "Autre (...)" exclu des suggestions (demande de Gilles, 2026-09-11) :
+  // acceptable comme choix par defaut pour l'usager SpotSan, jamais pour un
+  // modérateur -- qui doit qualifier precisement ce qu'il constate. Un tag
+  // "Autre" deja present sur la photo (avant cette regle) reste affichable
+  // et retirable dans les chips actifs plus bas, juste plus re-proposable ici.
   const suggestions = $derived(
-    taxonomie.filter((t) => !selection.has(t.tag) && (!rechercheNorm || t.tag.toLowerCase().includes(rechercheNorm)))
+    taxonomie.filter((t) => !selection.has(t.tag) && !t.tag.startsWith('Autre') && (!rechercheNorm || t.tag.toLowerCase().includes(rechercheNorm)))
   )
   const exactMatch = $derived(taxonomie.some((t) => t.tag.toLowerCase() === rechercheNorm))
 

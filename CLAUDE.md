@@ -497,3 +497,14 @@ draft, so undo has nothing to reverse).
    one batched statement/transaction where the constraint is only checked at the end (Postgres supports
    `DEFERRABLE INITIALLY DEFERRED` unique constraints — may be the cleanest fix: make `cle`'s uniqueness
    constraint deferrable so it's only checked at transaction commit, not after each individual UPDATE).
+
+**"Autre" is a user-only fallback, never for the IA or a moderator (2026-09-11)**: the 3 generic
+`Autre (Vandalisme)`/`Autre (Défaut d'entretien)`/`Autre (Défaut de réparation)` taxonomy rows exist so
+SpotSan's picker always has *something* to offer an usager who can't qualify precisely what they saw — they
+were never meant as a legitimate pick for the detection pipeline or a human moderator, both of which are
+expected to qualify exactly what they observe (free text if nothing in the taxonomy fits, see the
+"AI can propose a free-text tag" note above). Fixed same day: `detection_iv.js`'s `construirePrompt()` now
+excludes any tag starting with `Autre` from what's listed to the model per category (it was contradicting
+the very next sentence of the prompt, "propose un intitulé précis" instead of a catch-all), and
+`DetailPhoto.svelte`'s moderator-facing tag-search suggestions do the same. `propose_utilisateur` on these
+rows is untouched — SpotSan's own picker should keep offering them.
