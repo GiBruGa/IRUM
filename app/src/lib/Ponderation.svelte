@@ -24,7 +24,15 @@
   // réécrire à ce moment-là.
 
   const COULEUR_CONFIANCE = { haute: '#22c55e', moyenne: '#f59e0b', basse: '#ef4444' }
-  const PAGE = 60
+  // Palier de recuperation, et nombre de vignettes vise pour remplir le
+  // bandeau du bas -- charger() complete automatiquement par paliers tant
+  // que le filtre courant ("en litige seulement" par defaut) laisse le
+  // bandeau trop clairsemé, au lieu d'afficher un compte de cache qui ne
+  // correspond pas a ce qui est visible (ex. "60 en cache" pour 6 vignettes
+  // affichees une fois le filtre applique -- retour de Gilles, 2026-09-11).
+  const PAGE = 40
+  const OBJECTIF_VIGNETTES = 30
+  const LIMITE_MAX = 600
 
   let chargement = $state(true)
   let erreur = $state('')
@@ -92,24 +100,31 @@
     totalAExpertiser = count ?? null
   }
 
-  async function charger() {
-    chargement = true
-    erreur = ''
+  let taxonomieChargee = false
+  async function chargerTaxonomieEquivalences() {
+    if (taxonomieChargee) return
+    const [taxRes, eqRes] = await Promise.all([
+      supabase.from('Incivilites_Taxonomie').select('tag,actif,ordre,categorie_iver,propose_par_ia,criteres_detection,cle,label').order('ordre'),
+      supabase.from('Tags_IA_Equivalences').select('texte_ia,tag'),
+    ])
+    taxonomie = taxRes.data || []
+    equivalences = eqRes.data || []
+    taxonomieChargee = true
+  }
+
+  // Un seul aller-retour reseau : recupere les Incident_Reports a la limite
+  // courante + leurs tags + les profils des moderateurs deja presents.
+  // Renvoie le nombre de lignes brutes recues (pour savoir si on a atteint
+  // la fin des resultats disponibles).
+  async function chargerLot() {
     let requete = supabase
       .from('Incident_Reports')
       .select('Report_id,UB_id,Photo,Description,Reported_at,verifie_humain,confiance_ia,tags_ia_origine,tags_utilisateur,pondere_par,pondere_le')
       .order('Reported_at', { ascending: false })
       .limit(limite)
     requete = appliquerFiltres(requete)
-
-    const [repRes, taxRes, eqRes] = await Promise.all([
-      requete,
-      supabase.from('Incivilites_Taxonomie').select('tag,actif,ordre,categorie_iver,propose_par_ia,criteres_detection,cle,label').order('ordre'),
-      supabase.from('Tags_IA_Equivalences').select('texte_ia,tag'),
-    ])
-    if (repRes.error) { erreur = repRes.error.message; chargement = false; return }
-    taxonomie = taxRes.data || []
-    equivalences = eqRes.data || []
+    const repRes = await requete
+    if (repRes.error) { erreur = repRes.error.message; return 0 }
 
     const ids = (repRes.data || []).map((r) => r.Report_id)
     const tagsRes = ids.length
@@ -129,10 +144,45 @@
 
     reports = (repRes.data || []).map((r) => ({ ...r, tags_actuels: tagsByReport[r.Report_id] || [] }))
     if (selection === null && reports.length) selection = reports[0].Report_id
+    return repRes.data ? repRes.data.length : 0
+  }
+
+  // Chargement complet (montage initial, changement de filtre) : repart de
+  // zero puis complete automatiquement par paliers de PAGE tant que le
+  // bandeau du bas reste trop clairsemé pour le filtre courant, au lieu de
+  // s'arrêter à un compte de cache qui ne correspond pas à ce qui est
+  // affiché (retour de Gilles, 2026-09-11).
+  async function charger() {
+    chargement = true
+    erreur = ''
+    await chargerTaxonomieEquivalences()
+    limite = PAGE
+    let recues = await chargerLot()
+    while (filtres.length < OBJECTIF_VIGNETTES && recues === limite && limite < LIMITE_MAX) {
+      limite += PAGE
+      recues = await chargerLot()
+    }
     chargement = false
     compterTotal()
   }
   onMount(() => { chargerProfil(); charger() })
+
+  // Reaffiche a la limite courante (pas de reinitialisation) -- utilisé après
+  // l'enregistrement d'une photo, pour ne pas perdre une pagination déjà
+  // étendue manuellement via "Charger un lot de plus".
+  async function rafraichir() {
+    await chargerLot()
+    compterTotal()
+  }
+
+  // Bouton "Charger un lot de plus" : un seul palier supplémentaire, geste
+  // explicite de l'utilisateur -- pas besoin de la boucle automatique de
+  // charger() ici.
+  async function chargerPlus() {
+    limite += PAGE
+    await chargerLot()
+    compterTotal()
+  }
 
   // (a) ecart utilisateur/IA -- seulement calculable si les deux existent.
   // (b) 1/10 systematique parmi les photos passees par l'IA -- Report_id
@@ -173,7 +223,7 @@
     return p
   }
 
-  function apresEnregistrement() { charger() }
+  function apresEnregistrement() { rafraichir() }
 </script>
 
 {#snippet vignette(r)}
@@ -202,7 +252,7 @@
 
   <div class="barre">
     <label class="chk">
-      <input type="checkbox" bind:checked={litigeSeulement} />
+      <input type="checkbox" bind:checked={litigeSeulement} onchange={charger} />
       En litige seulement ({enrichis.filter((r) => r.litige).length})
     </label>
     <input class="recherche" placeholder="Sanitaire (UB_id)…" bind:value={rechercheUb} onchange={charger} />
@@ -232,12 +282,15 @@
 
     <div class="bandeau-vignettes">
       <div class="entete-vignettes">
+        <!-- Plus de compte "en cache" affiché (demande de Gilles, 2026-09-11) :
+             charger() complète maintenant automatiquement le bandeau jusqu'à
+             OBJECTIF_VIGNETTES pour le filtre courant, donc ce nombre ne
+             correspondait plus jamais à ce qui est réellement visible. -->
         <span>
           {totalAExpertiser !== null ? `${totalAExpertiser} photo${totalAExpertiser > 1 ? 's' : ''} à expertiser au total` : '…'}
-          ({reports.length} chargée{reports.length > 1 ? 's' : ''} en cache)
         </span>
         {#if reports.length === limite}
-          <button class="charger-plus" onclick={() => { limite += PAGE; charger() }}>Charger un lot de plus</button>
+          <button class="charger-plus" onclick={chargerPlus}>Charger un lot de plus</button>
         {/if}
       </div>
       <div class="grille-vignettes">
