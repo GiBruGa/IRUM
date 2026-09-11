@@ -27,7 +27,7 @@
 <div class="app">
   <header>
     <div class="titre">
-      <h1><span class="wm-strong">IRU</span><span class="wm-soft">M</span></h1>
+      <h1><span class="wm-strong">iru</span><span class="wm-soft">M</span></h1>
       <p class="signification">Incident, Repair &amp; Upkeep Monitoring</p>
     </div>
     <nav>
@@ -36,7 +36,7 @@
     </nav>
     <div class="marque">
       <span class="marque-texte">
-        <span class="wm-strong">IRU</span><span class="wm-soft">M</span> est un service
+        <span class="wm-strong">iru</span><span class="wm-soft">M</span> est un service
         <span class="wm-strong">Ur</span><span class="wm-soft">Bizia</span>
       </span>
       <img alt="UrBizia" src={logoUrbizia} />

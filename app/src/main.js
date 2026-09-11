@@ -1,7 +1,7 @@
 import { mount } from 'svelte'
 import App from './App.svelte'
 
-document.title = 'IRUM'
+document.title = 'iruM'
 
 // Volontairement SANS verification de compte pour l'instant (decide par
 // Gilles le 2026-09-03) : FBS/RFQ ont demarre avec leur propre ecran de
