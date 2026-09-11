@@ -464,39 +464,36 @@ struck-through with an "à supprimer" badge, undoable via right-click, until Val
 (child detachment, i.e. `parent_tag → null`, is computed fresh at validation time, not eagerly in the
 draft, so undo has nothing to reverse).
 
-**Known bugs reported by Gilles, not yet fixed (2026-09-11, pausing to let a batch job finish first)**:
-1. **Dragging an AI-suggested tag onto an existing tree row silently absorbs it as an equivalence
-   (`propose_par_ia=false, actif=false`) instead of inserting it as a new node** — it disappears from the
-   "Tags suggérés IA" list but never appears in the tree, because an inactive/uncategorized row matches
-   none of the tree's display filters (`racinesCategorie`/`racinesSansCategorie`). This is actually the
-   *original documented equivalence behavior* from 2026-09-04 ("dragging onto an existing node declares an
-   equivalence; dragging onto a category header promotes it as a new node") — Gilles's expectation when
-   dropping directly onto a row was apparently "nest it here as a child", which conflicts with that
-   existing gesture. Needs a design decision before a code fix: keep the two-step promote-then-reparent
-   flow (and make equivalence-absorption more visible when it happens), or change what dropping onto a row
-   means.
-2. **Cannot type a space in Fiche IVER's Label/Remarques fields.** Root cause identified (not yet fixed):
-   `FicheIver.svelte`'s `surLabel()`/`surRemarques()` call `onEnregistrer` with `label.trim()`/
-   `remarques.trim()` on *every keystroke* (`oninput`), not just on submit. Since every staged edit
-   reassigns `Catalogue.svelte`'s `brouillon` (new object identity even when the trimmed value is
-   unchanged), `noeudSelectionne`/the `noeud` prop change reference on every keystroke, re-running
-   `FicheIver`'s `$effect` (`label = noeud.label; ...`) — which resets the local input state to the
-   *trimmed* value, wiping out any trailing space the instant it's typed. Fix: stage the raw (untrimmed)
-   value on every keystroke, trim only once at the real Supabase write (in `validerMiseAJour`) or on blur
-   — not inside the per-keystroke handler.
-3. **Ergonomics**: the "Retenu pour Utilisateurs SpotSan" checkbox in Fiche IVER's compact row should come
-   *before* the Label input, not after (currently: clé, label, counter, checkbox).
-4. **`Erreur : duplicate key value violates unique constraint "incivilites_taxonomie_cle_key"` when
-   clicking "Valider les modifications".** Diagnosis: `validerMiseAJour()` writes each survivor's new `cle`
-   with a separate sequential `UPDATE ... WHERE tag = ?`, but `cle` has a `UNIQUE` constraint — if the
-   renumbering swaps or shifts `cle` values among siblings (e.g. tag A's new `cle` equals tag B's *current*
-   `cle`, which hasn't been updated yet at that point in the loop), the DB rejects the transient collision
-   even though the *final* set of `cle` values would be fully valid. Classic reorder-under-a-unique-
-   constraint problem. Needs either a two-phase write (stage all affected rows to temporary/unique
-   placeholder `cle` values first, then set final values in a second pass) or writing all `cle` changes in
-   one batched statement/transaction where the constraint is only checked at the end (Postgres supports
-   `DEFERRABLE INITIALLY DEFERRED` unique constraints — may be the cleanest fix: make `cle`'s uniqueness
-   constraint deferrable so it's only checked at transaction commit, not after each individual UPDATE).
+**Known bugs reported by Gilles, 2026-09-11 — all four fixed same day**:
+1. ~~Dragging an AI-suggested tag onto an existing tree row silently absorbs it as an equivalence instead
+   of inserting it as a new node~~ — resolved by design discussion, not a code fix: Gilles confirmed the
+   underlying tension is that the *official* IVER list must stay small (needed for statistical
+   aggregation), so every non-promoted AI proposal should always fold into an existing official tag via
+   equivalence, never become a tree node of its own. The real gap was that this folding was invisible —
+   see "Tags IA Associés" below, which is the actual fix.
+2. ~~Cannot type a space in Fiche IVER's Label/Remarques fields~~ — fixed: `FicheIver.svelte` no longer
+   trims on every keystroke (was staging the trimmed value into the draft, which round-tripped back through
+   the `noeud`-sync `$effect` and erased the space the instant it was typed); trimming now happens once, in
+   `validerMiseAJour`, right before the real write.
+3. ~~SpotSan checkbox should come before the Label input~~ — reordered in the compact row.
+4. ~~`duplicate key value violates unique constraint "incivilites_taxonomie_cle_key"` on Valider~~ — fixed:
+   `validerMiseAJour()` now neutralizes every `cle` that's about to change to a unique temp placeholder
+   (`"~" + tag`) in a first pass, before writing any final values in the second pass — avoids the transient
+   collision when a reorder swaps `cle` values between siblings. (A `DEFERRABLE` constraint would not have
+   helped: each Supabase REST call is its own auto-committed transaction, there's no single transaction
+   spanning the write loop to defer within.)
+
+**"Tags IA Associés" panel (2026-09-11)**: added between Fiche IVER and Arborescence in `Catalogue.svelte`.
+Once an equivalence was declared it became invisible — no way to see, for a given official tag, which AI
+free-text variants point to it, so no way to check they're still relevant after editing that tag, or to
+fix a wrong association. This panel lists the AI texts currently equivalent to the *selected* tag; drag
+one onto a different tree row to repoint it (reassociation is literally the same `declarerEquivalence()`
+call as a fresh association — a `Map` naturally overwrites), or hit "×" to dissociate it back into "Tags
+suggérés IA" as if it had never been rattached. Equivalences now follow the same draft/original diffing
+as the rest of the file (`equivalences` = server truth, `equivalencesBrouillon` = `Map<texte_ia, tag>`
+being edited) instead of a write-only pending list — so associate/reassociate/dissociate are all counted
+correctly in `nbModifications` and only reach Supabase (`upsert`/`delete`) on Valider, per Gilles's explicit
+requirement that this stay consistent with the deferred-validation model.
 
 **"Autre" is a user-only fallback, never for the IA or a moderator (2026-09-11)**: the 3 generic
 `Autre (Vandalisme)`/`Autre (Défaut d'entretien)`/`Autre (Défaut de réparation)` taxonomy rows exist so
