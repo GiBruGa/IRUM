@@ -276,15 +276,6 @@
     e.dataTransfer.effectAllowed = 'move'
   }
 
-  let survoleAssocies = $state(false)
-  function surDropAssocies(e) {
-    e.preventDefault()
-    survoleAssocies = false
-    if (!selection) return
-    const texteIa = e.dataTransfer.getData('text/x-irum-ia')
-    if (texteIa) declarerEquivalence(texteIa, selection)
-  }
-
   let survoleCategorie = $state(null)
   function surDropCategorie(e, code) {
     e.preventDefault()
@@ -610,38 +601,16 @@
       <section class="col-fiche">
         {#if noeudSelectionne}
           {#key noeudSelectionne.tag}
-            <FicheIver noeud={noeudSelectionne} onEnregistrer={enregistrerFiche} />
+            <FicheIver
+              noeud={noeudSelectionne}
+              onEnregistrer={enregistrerFiche}
+              associes={associesDuTagSelectionne}
+              onDeclarerEquivalence={(texteIa) => declarerEquivalence(texteIa, selection)}
+              onDissocier={dissocierEquivalence}
+            />
           {/key}
         {:else}
           <p class="vide">Cliquez un tag dans l'arborescence pour voir sa fiche.</p>
-        {/if}
-      </section>
-
-      <!-- Tags IA Associés (demande de Gilles, 2026-09-11) : liste, pour le
-           tag actuellement sélectionné, les textes IA qui lui sont
-           équivalents -- pour vérifier leur pertinence après coup et les
-           réassocier (glisser vers un autre tag de l'arbre) ou les dissocier
-           (×) sans avoir à fouiller la base. -->
-      <section
-        class="col-associes"
-        class:survole={survoleAssocies}
-        ondragover={(e) => { if (noeudSelectionne) { e.preventDefault(); survoleAssocies = true } }}
-        ondragleave={() => (survoleAssocies = false)}
-        ondrop={(e) => surDropAssocies(e)}
-      >
-        <h2>Tags IA Associés {noeudSelectionne ? `(${associesDuTagSelectionne.length})` : ''}</h2>
-        {#if !noeudSelectionne}
-          <p class="vide">Sélectionnez un tag pour voir ou associer des textes IA.</p>
-        {:else}
-          <div class="liste-associes" role="list">
-            {#each associesDuTagSelectionne as texteIa (texteIa)}
-              <div class="carte-ia carte-associee" role="listitem" draggable="true" ondragstart={(e) => surDragStartIA(e, texteIa)}>
-                <span>{texteIa}</span>
-                <button class="btn-dissocier" title="Dissocier" onclick={() => dissocierEquivalence(texteIa)}>×</button>
-              </div>
-            {/each}
-            {#if !associesDuTagSelectionne.length}<p class="vide">Aucun texte IA associé. Glissez-en un ici depuis « Tags suggérés IA ».</p>{/if}
-          </div>
         {/if}
       </section>
 
@@ -753,29 +722,13 @@
      naturelle (flex-shrink:0), Arborescence prend tout le reste. */
   .col-droite { display: flex; flex-direction: column; gap: 1rem; min-height: 0; }
 
-  .col-ia, .col-arbre, .col-fiche, .col-associes {
+  .col-ia, .col-arbre, .col-fiche {
     background: #17171a; border: 1px solid #2a2a2d; border-radius: 10px; padding: 0.7rem;
   }
   .col-ia { display: flex; flex-direction: column; min-height: 0; }
   .col-fiche { flex-shrink: 0; }
-  /* Comme .col-fiche : hauteur naturelle, ne grandit pas -- l'Arborescence
-     doit garder tout le reste de l'espace disponible. Scroll interne propre
-     si beaucoup de textes IA sont associés au meme tag. */
-  .col-associes { flex-shrink: 0; max-height: 220px; display: flex; flex-direction: column; }
-  .col-associes.survole { border-color: #c55a7a; background: #1c1418; }
   .col-arbre { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   h2 { font-size: 0.82rem; margin: 0 0 0.6rem; color: #e8e6e6; flex-shrink: 0; }
-
-  .liste-associes { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
-  .carte-associee {
-    display: flex; align-items: center; justify-content: space-between; gap: 6px; cursor: grab;
-  }
-  .carte-associee span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .carte-associee:active { cursor: grabbing; }
-  .btn-dissocier {
-    background: transparent; border: none; color: #c55a7a; font-size: 0.95rem; line-height: 1; cursor: pointer;
-    padding: 0 2px; flex-shrink: 0;
-  }
 
   /* padding-right : les cartes en pointilles (border dashed) ne doivent pas
      toucher l'ascenseur vertical (demande de Gilles, 2026-09-04). */

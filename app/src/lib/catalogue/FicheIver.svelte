@@ -1,5 +1,22 @@
 <script>
-  let { noeud, onEnregistrer } = $props()
+  // associes/onDeclarerEquivalence/onDissocier : "Tags IA Associés" (demande
+  // de Gilles, 2026-09-11) -- rattaché ici plutôt qu'en encart séparé, "plus
+  // évident" puisque c'est une info sur le tag sélectionné comme le reste de
+  // cette fiche.
+  let { noeud, onEnregistrer, associes, onDeclarerEquivalence, onDissocier } = $props()
+
+  let survoleAssocies = $state(false)
+  function surDragOverAssocies(e) { e.preventDefault(); survoleAssocies = true }
+  function surDropAssocies(e) {
+    e.preventDefault()
+    survoleAssocies = false
+    const texteIa = e.dataTransfer.getData('text/x-irum-ia')
+    if (texteIa) onDeclarerEquivalence(texteIa)
+  }
+  function surDragStartAssocie(e, texteIa) {
+    e.dataTransfer.setData('text/x-irum-ia', texteIa)
+    e.dataTransfer.effectAllowed = 'move'
+  }
 
   // Chaque champ applique directement au brouillon (onEnregistrer =
   // Catalogue.svelte's enregistrerFiche, une simple ecriture locale, jamais
@@ -69,6 +86,25 @@
     <span>Remarques</span>
     <textarea bind:value={remarques} rows="4" oninput={surRemarques}></textarea>
   </label>
+
+  <div
+    class="associes"
+    class:survole={survoleAssocies}
+    ondragover={surDragOverAssocies}
+    ondragleave={() => (survoleAssocies = false)}
+    ondrop={surDropAssocies}
+  >
+    <span class="champ-titre">Tags IA Associés ({associes.length})</span>
+    <div class="liste-associes" role="list">
+      {#each associes as texteIa (texteIa)}
+        <div class="carte-associee" role="listitem" draggable="true" ondragstart={(e) => surDragStartAssocie(e, texteIa)}>
+          <span>{texteIa}</span>
+          <button class="btn-dissocier" title="Dissocier" onclick={() => onDissocier(texteIa)}>×</button>
+        </div>
+      {/each}
+      {#if !associes.length}<p class="vide">Aucun texte IA associé. Glissez-en un ici depuis « Tags suggérés IA ».</p>{/if}
+    </div>
+  </div>
 </div>
 
 <style>
@@ -85,4 +121,25 @@
     padding: 7px 10px; font-family: inherit; font-size: 0.85rem; resize: vertical;
   }
   .erreur { color: #f87171; font-size: 0.78rem; margin: 0; }
+
+  /* Tags IA Associés : rattaché à la fiche (demande de Gilles, 2026-09-11),
+     avec son propre ascenseur vertical -- sinon une fiche avec beaucoup
+     d'équivalences pousserait tout le panneau (et l'Arborescence en dessous)
+     à n'importe quelle hauteur. */
+  .associes { display: flex; flex-direction: column; gap: 4px; border-radius: 8px; border: 1px solid transparent; padding: 2px; }
+  .associes.survole { border-color: #c55a7a; background: #1c1418; }
+  .champ-titre { font-size: 0.78rem; color: #999; }
+  .liste-associes { display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto; padding-right: 4px; }
+  .carte-associee {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    background: #1f1f22; border: 1px dashed #c55a7a; color: #e8e6e6; border-radius: 8px;
+    padding: 6px 9px; font-size: 0.78rem; cursor: grab; box-sizing: border-box;
+  }
+  .carte-associee span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .carte-associee:active { cursor: grabbing; }
+  .btn-dissocier {
+    background: transparent; border: none; color: #c55a7a; font-size: 0.95rem; line-height: 1; cursor: pointer;
+    padding: 0 2px; flex-shrink: 0;
+  }
+  .vide { color: #666; font-size: 0.78rem; margin: 0; }
 </style>
