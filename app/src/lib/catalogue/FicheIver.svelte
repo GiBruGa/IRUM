@@ -30,7 +30,7 @@
   }
 
   async function supprimer() {
-    if (!confirm(`Supprimer le tag « ${noeud.label} » (clé ${noeud.cle}) ? Cette action est définitive.`)) return
+    if (!confirm(`Marquer le tag « ${noeud.label} » (clé ${noeud.cle}) pour suppression ? Elle sera appliquée lors de la validation du catalogue.`)) return
     suppression = true
     erreur = ''
     try {
@@ -53,7 +53,7 @@
   </label>
 
   <label class="champ">
-    <span>Remarques (critères de détection, utilisés par l'IA)</span>
+    <span>Remarques</span>
     <textarea bind:value={remarques} rows="4"></textarea>
   </label>
 

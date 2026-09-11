@@ -43,7 +43,7 @@
     </div>
   </header>
 
-  <main>
+  <main class:pleine-hauteur={onglet === 'catalogue'}>
     {#if onglet === 'catalogue'}
       <Catalogue />
     {:else if onglet === 'ponderation'}
@@ -57,8 +57,14 @@
   :root { --wm-strong: #C55A7A; --wm-soft: #FFC3D5; }
   @media (prefers-color-scheme: light) { :root { --wm-strong: #540E28; --wm-soft: #C55A7A; } }
 
-  .app { max-width: 1700px; margin: 0 auto; padding: 1rem; }
-  header { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  /* .app en colonne flex sur toute la hauteur de la fenetre : necessaire pour
+     que Catalogue.svelte puisse faire remplir ses encarts (Tags IA,
+     Arborescence) jusqu'au bas de l'ecran en CSS pur, sans mesure JS (demande
+     de Gilles, 2026-09-11). box-sizing:border-box pour que le padding ne
+     depasse pas les 100% de hauteur. */
+  .app { max-width: 1700px; margin: 0 auto; padding: 1rem; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; flex-shrink: 0; }
+  main.pleine-hauteur { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .titre { display: flex; flex-direction: column; gap: 1px; }
   h1 { font-size: 1.3rem; margin: 0; font-weight: 700; }
   h1 .wm-strong { color: var(--wm-strong); }

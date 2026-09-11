@@ -5,7 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>IRUM</title>
   <style>
-    body { margin: 0; background: #0f0f10; color: #e8e6e6; font-family: system-ui, sans-serif; }
+    /* height:100% en chaine (html -> body -> #app) : necessaire pour que les
+       encarts Arborescence/Tags IA de Catalogue.svelte puissent se caler sur
+       la hauteur reelle de la fenetre en pur flexbox (demande de Gilles,
+       2026-09-11), sans quoi un enfant flex:1 n'a rien a remplir. */
+    html, body { height: 100%; margin: 0; background: #0f0f10; color: #e8e6e6; font-family: system-ui, sans-serif; }
+    #app { height: 100%; }
   </style>
 </head>
 <body>

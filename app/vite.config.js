@@ -8,4 +8,5 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 export default defineConfig({
   base: '/IRUM/',
   plugins: [svelte()],
+  server: { port: Number(process.env.PORT) || 5175 },
 })
