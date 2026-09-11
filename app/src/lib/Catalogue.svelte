@@ -83,28 +83,32 @@
 
   // Toutes les vues derivees lisent le brouillon (pas taxonomie) -- c'est ce
   // que l'utilisateur voit et manipule pendant l'edition, avant validation.
-  const parTag = $derived(new Map(brouillon.filter((t) => !suppressions.has(t.tag)).map((t) => [t.tag, t])))
+  // Un tag marque pour suppression reste present (barre visuellement dans
+  // TreeNode via noeud.supprime, cf. construireArbre) -- il ne disparait
+  // qu'a la validation reelle, pour pouvoir annuler la suppression avant
+  // (demande de Gilles, 2026-09-11).
+  const parTag = $derived(new Map(brouillon.map((t) => [t.tag, t])))
   const enfantsParTag = $derived.by(() => {
     const m = {}
-    brouillon.forEach((t) => { if (!suppressions.has(t.tag) && t.parent_tag && !suppressions.has(t.parent_tag)) (m[t.parent_tag] ||= []).push(t) })
+    brouillon.forEach((t) => { if (t.parent_tag) (m[t.parent_tag] ||= []).push(t) })
     return m
   })
-  const suggeresIA = $derived(brouillon.filter((t) => t.propose_par_ia && !suppressions.has(t.tag)))
+  const suggeresIA = $derived(brouillon.filter((t) => t.propose_par_ia))
 
   const rechercheNorm = $derived(recherche.trim().toLowerCase())
   const tagsCorrespondants = $derived(
-    rechercheNorm ? new Set(brouillon.filter((t) => !suppressions.has(t.tag) && t.label.toLowerCase().includes(rechercheNorm)).map((t) => t.tag)) : null
+    rechercheNorm ? new Set(brouillon.filter((t) => t.label.toLowerCase().includes(rechercheNorm)).map((t) => t.tag)) : null
   )
 
   function construireArbre(tag) {
-    const noeud = parTag.get(tag)
-    if (!noeud) return null
+    const brut = parTag.get(tag)
+    if (!brut) return null
     const enfants = (enfantsParTag[tag] || [])
       .slice()
       .sort((a, b) => a.ordre - b.ordre)
       .map((e) => construireArbre(e.tag))
       .filter(Boolean)
-    return { noeud, enfants }
+    return { noeud: { ...brut, supprime: suppressions.has(tag) }, enfants }
   }
 
   // Un tag propose_par_ia vit dans la colonne "Tags suggérés IA" tant qu'il
@@ -113,7 +117,7 @@
   // deux fois pour rien.
   function racinesCategorie(code) {
     return brouillon
-      .filter((t) => !suppressions.has(t.tag) && t.categorie_iver === code && !t.parent_tag && !t.propose_par_ia)
+      .filter((t) => t.categorie_iver === code && !t.parent_tag && !t.propose_par_ia)
       .sort((a, b) => a.ordre - b.ordre)
       .map((t) => construireArbre(t.tag))
       .filter(Boolean)
@@ -123,7 +127,7 @@
   // l'ancien "Autre" générique, désactivé le 2026-09-02 au profit des 4
   // "Autre (I/V/E/R)"), pas quelque chose à ranger.
   const racinesSansCategorie = $derived(
-    brouillon.filter((t) => !suppressions.has(t.tag) && !t.categorie_iver && !t.parent_tag && !t.propose_par_ia && t.actif)
+    brouillon.filter((t) => !t.categorie_iver && !t.parent_tag && !t.propose_par_ia && t.actif)
       .sort((a, b) => a.ordre - b.ordre)
       .map((t) => construireArbre(t.tag))
       .filter(Boolean)
@@ -201,7 +205,7 @@
       // une colonne vide -- une comparaison stricte avec nouvelleCategorie
       // (undefined quand cible est "Non classé") ne matchait jamais, cassant
       // le reordonnancement dans "Non classé" silencieusement.
-      : brouillon.filter((t) => !suppressions.has(t.tag) && (t.categorie_iver ?? null) === (nouvelleCategorie ?? null) && !t.parent_tag && !t.propose_par_ia)
+      : brouillon.filter((t) => (t.categorie_iver ?? null) === (nouvelleCategorie ?? null) && !t.parent_tag && !t.propose_par_ia)
     const fratrie = fratrieBrute.filter((t) => t.tag !== tagDeplace).sort((a, b) => a.ordre - b.ordre)
     const indexCible = fratrie.findIndex((t) => t.tag === cibleTag)
     fratrie.splice(avant ? indexCible : indexCible + 1, 0, noeud)
@@ -257,15 +261,19 @@
   }
 
   // Suppression differee : marquee dans "suppressions", appliquee seulement a
-  // la validation. Les enfants directs sont detaches (parent_tag -> null)
-  // dans le brouillon des maintenant, pour que l'arbre affiche immediatement
-  // ce qui sera reellement vrai apres validation (meme comportement que le
-  // ON DELETE SET NULL cote base).
+  // la validation -- le tag reste visible dans l'arbre (barre, cf.
+  // TreeNode.svelte) jusque-la, pour pouvoir "Annuler la suppression" par
+  // clic droit avant de valider (demande de Gilles, 2026-09-11). Le
+  // detachement des enfants (parent_tag -> null, comme ON DELETE SET NULL
+  // cote base) n'est calcule qu'a la validation, voir validerMiseAJour --
+  // pas ici, pour ne rien avoir a "annuler" en cas de retour en arriere.
   function marquerPourSuppression(tag) {
     suppressions = new Set([...suppressions, tag])
-    const enfantsDirects = brouillon.filter((t) => t.parent_tag === tag)
-    if (enfantsDirects.length) modifierPlusieurs(enfantsDirects.map((e) => ({ tag: e.tag, champs: { parent_tag: null } })))
-    if (selection === tag) selection = null
+  }
+  function annulerSuppressionTag(tag) {
+    const s = new Set(suppressions)
+    s.delete(tag)
+    suppressions = s
   }
 
   // Propose un vrai fichier a l'utilisateur (demande de Gilles, 2026-09-11 :
@@ -342,7 +350,7 @@
     const categorie = cible.categorie_iver
     const fratrieBrute = parentTag
       ? (enfantsParTag[parentTag] || [])
-      : brouillon.filter((t) => !suppressions.has(t.tag) && (t.categorie_iver ?? null) === (categorie ?? null) && !t.parent_tag && !t.propose_par_ia)
+      : brouillon.filter((t) => (t.categorie_iver ?? null) === (categorie ?? null) && !t.parent_tag && !t.propose_par_ia)
     const fratrie = fratrieBrute.slice().sort((a, b) => a.ordre - b.ordre)
     const indexCible = fratrie.findIndex((t) => t.tag === tagRef)
     const nouveauTag = `nouveau_${Date.now()}`
@@ -366,6 +374,11 @@
     if (!cible) return
     if (!confirm(`Marquer le tag « ${cible.label} » pour suppression ? Elle sera appliquée lors de la validation du catalogue.`)) return
     marquerPourSuppression(tagRef)
+  }
+
+  function annulerSuppressionAvecMenu(tagRef) {
+    fermerMenuContextuel()
+    annulerSuppressionTag(tagRef)
   }
 
   // Nombre de modifications en attente -- pilote l'affichage de la barre de
@@ -409,7 +422,13 @@
     validation = true
     erreur = ''
     try {
-      const survivants = brouillon.filter((t) => !suppressions.has(t.tag))
+      // Les enfants directs d'un tag supprime sont detaches a la validation
+      // (parent_tag -> null), comme le fait ON DELETE SET NULL cote base --
+      // calcule ici seulement (pas dans le brouillon pendant l'edition) pour
+      // que "Annuler la suppression" n'ait rien a defaire (2026-09-11).
+      const survivants = brouillon
+        .filter((t) => !suppressions.has(t.tag))
+        .map((t) => (t.parent_tag && suppressions.has(t.parent_tag) ? { ...t, parent_tag: null } : t))
       const enfantsFinal = {}
       survivants.forEach((t) => { if (t.parent_tag) (enfantsFinal[t.parent_tag] ||= []).push(t) })
 
@@ -496,7 +515,7 @@
       <section class="col-fiche">
         {#if noeudSelectionne}
           {#key noeudSelectionne.tag}
-            <FicheIver noeud={noeudSelectionne} onEnregistrer={enregistrerFiche} onSupprimer={marquerPourSuppression} />
+            <FicheIver noeud={noeudSelectionne} onEnregistrer={enregistrerFiche} />
           {/key}
         {:else}
           <p class="vide">Cliquez un tag dans l'arborescence pour voir sa fiche.</p>
@@ -565,7 +584,11 @@
     <button class="voile-menu" aria-label="Fermer le menu" onclick={fermerMenuContextuel} oncontextmenu={(e) => { e.preventDefault(); fermerMenuContextuel() }}></button>
     <div class="menu-contextuel" style:left="{menuContextuel.x}px" style:top="{menuContextuel.y}px" role="menu">
       <button role="menuitem" onclick={() => ajouterTagApres(menuContextuel.tag)}>+ Ajouter un tag en dessous</button>
-      <button role="menuitem" class="danger" onclick={() => supprimerAvecConfirmation(menuContextuel.tag)}>Supprimer ce tag</button>
+      {#if suppressions.has(menuContextuel.tag)}
+        <button role="menuitem" onclick={() => annulerSuppressionAvecMenu(menuContextuel.tag)}>↩ Annuler la suppression</button>
+      {:else}
+        <button role="menuitem" class="danger" onclick={() => supprimerAvecConfirmation(menuContextuel.tag)}>Supprimer ce tag</button>
+      {/if}
     </div>
   {/if}
 </div>

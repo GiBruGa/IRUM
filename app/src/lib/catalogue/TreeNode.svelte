@@ -64,6 +64,7 @@
     class:survole-avant={zone === 'avant'}
     class:survole-apres={zone === 'apres'}
     class:inactif={!noeud.actif}
+    class:supprime={noeud.supprime}
     style:padding-left="{profondeur * 18}px"
     draggable="true"
     ondragstart={onDragStart}
@@ -91,6 +92,7 @@
     ></span>
     <span class="cle">{noeud.cle}</span>
     <span class="label">{noeud.label}{noeud.propose_par_ia ? ' 🆕' : ''}</span>
+    {#if noeud.supprime}<span class="etiquette-supprime">à supprimer</span>{/if}
     {#if zone}
       <span class="etiquette-depot etiquette-{zone}">
         {zone === 'avant' ? '↑ avant' : zone === 'apres' ? '↓ après' : '→ enfant de « ' + noeud.label + ' »'}
@@ -132,6 +134,14 @@
   .ligne.survole-avant::before { top: -2px; }
   .ligne.survole-apres::after { bottom: -2px; }
   .ligne.inactif { opacity: 0.45; }
+  /* Suppression differee (2026-09-11) : le tag reste visible -- barre plutot
+     que retire -- jusqu'a la validation, pour pouvoir "Annuler la
+     suppression" par clic droit avant que ce soit definitif. */
+  .ligne.supprime .label { text-decoration: line-through; color: #888; }
+  .etiquette-supprime {
+    flex-shrink: 0; font-size: 0.64rem; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+    background: transparent; border: 1px solid #f87171; color: #f87171; white-space: nowrap;
+  }
   .etiquette-depot {
     margin-left: auto; flex-shrink: 0; font-size: 0.66rem; font-weight: 700; padding: 2px 8px;
     border-radius: 999px; background: #c55a7a; color: #fff; white-space: nowrap; pointer-events: none;

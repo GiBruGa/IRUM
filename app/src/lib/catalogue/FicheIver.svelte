@@ -1,5 +1,5 @@
 <script>
-  let { noeud, onEnregistrer, onSupprimer } = $props()
+  let { noeud, onEnregistrer } = $props()
 
   // Chaque champ applique directement au brouillon (onEnregistrer =
   // Catalogue.svelte's enregistrerFiche, une simple ecriture locale, jamais
@@ -11,10 +11,12 @@
   // silencieusement. Un seul niveau maintenant : tout champ modifie ici part
   // immediatement dans le brouillon global, seul "Valider" (dans l'entete du
   // Catalogue) ecrit reellement dans Supabase.
+  //
+  // Pas de bouton Supprimer ici (retire 2026-09-11, redondant avec le clic
+  // droit sur le tag dans l'arborescence, seul point d'entree desormais).
   let label = $state(noeud.label)
   let remarques = $state(noeud.criteres_detection || '')
   let erreurLabel = $state('')
-  let suppression = $state(false)
 
   $effect(() => {
     label = noeud.label
@@ -34,65 +36,43 @@
   function surProposeUtilisateur(e) {
     onEnregistrer(noeud.tag, { propose_utilisateur: e.currentTarget.checked })
   }
-
-  async function supprimer() {
-    if (!confirm(`Marquer le tag « ${noeud.label} » (clé ${noeud.cle}) pour suppression ? Elle sera appliquée lors de la validation du catalogue.`)) return
-    suppression = true
-    try {
-      await onSupprimer(noeud.tag)
-    } finally {
-      suppression = false
-    }
-  }
 </script>
 
 <div class="fiche">
   <div class="titre">Fiche IVER</div>
-  <div class="champ-cle">Clé : <span>{noeud.cle}</span></div>
 
-  <label class="champ">
-    <span>Label <span class="compteur">({label.length}/50)</span></span>
-    <input bind:value={label} maxlength="50" oninput={surLabel} />
-  </label>
+  <!-- Clé + Label + case SpotSan sur une seule ligne pour plus de compacité,
+       et la case juste à la suite de la clé pour la mettre en évidence
+       (demandes de Gilles, 2026-09-11). -->
+  <div class="ligne-principale">
+    <span class="cle" title="Clé">{noeud.cle}</span>
+    <input class="entree-label" bind:value={label} maxlength="50" oninput={surLabel} placeholder="Label" />
+    <span class="compteur">{label.length}/50</span>
+    <label class="case-spotsan" title="Retenu pour Utilisateurs SpotSan">
+      <input type="checkbox" checked={noeud.propose_utilisateur || false} onchange={surProposeUtilisateur} />
+      <span>SpotSan</span>
+    </label>
+  </div>
   {#if erreurLabel}<p class="erreur">{erreurLabel}</p>{/if}
 
   <label class="champ">
     <span>Remarques</span>
     <textarea bind:value={remarques} rows="4" oninput={surRemarques}></textarea>
   </label>
-
-  <label class="champ-case">
-    <input type="checkbox" checked={noeud.propose_utilisateur || false} onchange={surProposeUtilisateur} />
-    <span>Retenu pour Utilisateurs SpotSan</span>
-  </label>
-
-  <div class="actions">
-    <button class="btn-supprimer" onclick={supprimer} disabled={suppression}>
-      {suppression ? 'Suppression…' : 'Supprimer'}
-    </button>
-  </div>
 </div>
 
 <style>
   .fiche { display: flex; flex-direction: column; gap: 10px; }
   .titre { font-weight: 600; color: #e8e6e6; font-size: 0.95rem; }
-  .champ-cle { font-size: 0.8rem; color: #999; font-family: ui-monospace, monospace; }
-  .champ-cle span { color: #e8e6e6; }
+  .ligne-principale { display: flex; align-items: center; gap: 8px; }
+  .cle { color: #888; font-size: 0.75rem; font-family: ui-monospace, monospace; flex-shrink: 0; }
+  .entree-label { flex: 1; min-width: 0; }
+  .compteur { color: #666; font-size: 0.68rem; flex-shrink: 0; }
+  .case-spotsan { display: flex; align-items: center; gap: 4px; font-size: 0.75rem; color: #e8e6e6; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
   .champ { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: #999; }
-  .compteur { color: #666; }
   input, textarea {
     background: #1a1a1c; border: 1px solid #333; border-radius: 8px; color: #e8e6e6;
     padding: 7px 10px; font-family: inherit; font-size: 0.85rem; resize: vertical;
   }
-  .champ-case { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #e8e6e6; cursor: pointer; }
   .erreur { color: #f87171; font-size: 0.78rem; margin: 0; }
-  .actions { display: flex; gap: 8px; }
-  /* Charte graphique §7 (2026-09-04) : jamais de fond plein par defaut sur
-     un bouton d'action -- le fond reste neutre, seule la couleur du texte
-     distingue banal (neutre) de mis en exergue (#C55A7A). */
-  .btn-supprimer {
-    background: #1a1a1c; border: 1px solid #c55a7a; color: #c55a7a; border-radius: 999px; padding: 9px 16px;
-    cursor: pointer; font-size: 0.85rem; font-weight: 600;
-  }
-  .btn-supprimer:disabled { opacity: 0.5; cursor: default; }
 </style>
