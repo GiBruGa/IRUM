@@ -68,15 +68,29 @@
     profilPrenom = profilCourant.prenom || ''
     profilNom = profilCourant.nom || ''
   }
+  // Convention de nommage (règle générale UrBizia, 2026-09-11) : NOM de
+  // famille toujours en majuscules, Prénom avec seulement la première lettre
+  // de chaque prénom en majuscule (gère les prénoms composés "Jean-Pierre",
+  // "Marie Claire").
+  function formaterNom(nom) {
+    return nom.trim().toUpperCase()
+  }
+  function formaterPrenom(prenom) {
+    return prenom.trim().toLowerCase().replace(/(^|[\s-])\p{L}/gu, (c) => c.toUpperCase())
+  }
+
   async function enregistrerProfil() {
     profilEnregistrement = true
     erreur = ''
     try {
-      const { error } = await supabase.from('profiles')
-        .upsert({ id: profilCourant.id, prenom: profilPrenom.trim() || null, nom: profilNom.trim() || null })
+      const prenom = profilPrenom.trim() ? formaterPrenom(profilPrenom) : null
+      const nom = profilNom.trim() ? formaterNom(profilNom) : null
+      const { error } = await supabase.from('profiles').upsert({ id: profilCourant.id, prenom, nom })
       if (error) throw error
-      profilCourant = { ...profilCourant, prenom: profilPrenom.trim() || null, nom: profilNom.trim() || null }
-      profils = new Map(profils).set(profilCourant.id, { prenom: profilCourant.prenom, nom: profilCourant.nom })
+      profilPrenom = prenom || ''
+      profilNom = nom || ''
+      profilCourant = { ...profilCourant, prenom, nom }
+      profils = new Map(profils).set(profilCourant.id, { prenom, nom })
     } catch (e) { erreur = e.message } finally { profilEnregistrement = false }
   }
 
