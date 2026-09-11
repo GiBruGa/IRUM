@@ -268,17 +268,60 @@
     if (selection === tag) selection = null
   }
 
+  // Propose un vrai fichier a l'utilisateur (demande de Gilles, 2026-09-11 :
+  // le bouton n'indiquait nulle part ou finissait la sauvegarde -- seul un
+  // insert Supabase invisible se produisait). showSaveFilePicker ouvre une
+  // fenetre "Enregistrer sous" native (Chrome/Edge) laissant choisir
+  // l'emplacement ; a defaut (Firefox/Safari, ou fenetre annulee/indisponible),
+  // repli sur un telechargement classique <a download> -- va dans le dossier
+  // Telechargements par defaut du navigateur, exactement ce qui etait demande.
+  async function telechargerJson(nomFichier, contenu) {
+    const texte = JSON.stringify(contenu, null, 2)
+    if (window.showSaveFilePicker) {
+      try {
+        const poignee = await window.showSaveFilePicker({
+          suggestedName: nomFichier,
+          types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+        })
+        const flux = await poignee.createWritable()
+        await flux.write(texte)
+        await flux.close()
+        return
+      } catch (e) {
+        if (e.name === 'AbortError') return // fenetre annulee par l'utilisateur -- pas une erreur
+        // sinon on tente le repli ci-dessous
+      }
+    }
+    const blob = new Blob([texte], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = nomFichier
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   async function sauvegarderVersion() {
     sauvegarde = true
     const maintenant = new Date()
     const titre = `Catalogue du ${maintenant.toLocaleDateString('fr-FR')} ${maintenant.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
+    const pad = (n) => String(n).padStart(2, '0')
+    const nomFichier = `catalogue-iver_${maintenant.getFullYear()}-${pad(maintenant.getMonth() + 1)}-${pad(maintenant.getDate())}_${pad(maintenant.getHours())}h${pad(maintenant.getMinutes())}.json`
     try {
       // Snapshot de l'etat serveur reel (taxonomie), pas du brouillon en
       // cours d'edition -- une version sauvegardee doit refleter ce qui est
       // effectivement en base, pas des modifications pas encore validees.
+      //
+      // telechargerJson AVANT l'ecriture Supabase, volontairement : l'API
+      // showSaveFilePicker exige d'etre appelee pendant le geste utilisateur
+      // (le clic) -- un premier `await` reseau avant elle ferait perdre cette
+      // autorisation dans certains navigateurs.
+      await telechargerJson(nomFichier, taxonomie)
       const { error: e2 } = await supabase.from('Catalogue_Versions').insert({ titre, contenu: taxonomie })
       if (e2) throw e2
-      alert(`Version sauvegardée : "${titre}"`)
+      alert(`Version sauvegardée : "${titre}" (historique du Catalogue + fichier).`)
     } catch (e) { erreur = e.message } finally { sauvegarde = false }
   }
 
