@@ -1,7 +1,7 @@
 <script>
   import { supabase } from './supabaseClient.js'
 
-  let { report, taxonomie, equivalences, onFermer, urlPhoto } = $props()
+  let { report, taxonomie, equivalences, urlPhoto, nomModerateurActuel, onEnregistre } = $props()
 
   const tagsIa = $derived(report.tags_ia_origine || [])
   const tagsUt = $derived(report.tags_utilisateur || [])
@@ -25,11 +25,14 @@
   let verifie = $state(true)
   let enregistrement = $state(false)
   let erreur = $state('')
+  // Zoom manuel de la photo (demande de Gilles, 2026-09-11) -- pour pouvoir
+  // faire sa propre expertise visuelle avant de trancher.
+  let zoom = $state(1)
 
   // Suggestion automatique (2026-09-04, demande de Gilles) : si un tag IA
   // d'origine a une equivalence connue (declaree dans le Catalogue) qui n'est
   // pas deja dans la decision courante, proposer l'application en un clic --
-  // ne touche rien tant que le pondérateur n'a pas clique et enregistre.
+  // ne touche rien tant que le pondérateur n'a pas clique et enregistré.
   const equivalencesParTexte = $derived(new Map((equivalences || []).map((e) => [e.texte_ia, e.tag])))
   const suggestionsEquivalence = $derived(
     tagsIa
@@ -71,8 +74,17 @@
     const aSupprimer = [...avant].filter((t) => !apres.has(t))
     const aAjouter = [...apres].filter((t) => !avant.has(t))
     try {
+      // pondere_par/pondere_le : identite + date du DERNIER moderateur
+      // seulement, ecrasees a chaque enregistrement -- pas d'historique
+      // (demande explicite de Gilles, 2026-09-11).
+      const { data: { user } } = await supabase.auth.getUser()
       const upd = await supabase.from('Incident_Reports')
-        .update({ Description: remarque.trim() || null, verifie_humain: verifie })
+        .update({
+          Description: remarque.trim() || null,
+          verifie_humain: verifie,
+          pondere_par: user?.id ?? null,
+          pondere_le: new Date().toISOString(),
+        })
         .eq('Report_id', report.Report_id)
       if (upd.error) throw upd.error
       if (aSupprimer.length) {
@@ -91,7 +103,7 @@
         })))
         if (i.error) throw i.error
       }
-      onFermer()
+      onEnregistre()
     } catch (e) {
       erreur = e.message
     } finally {
@@ -105,29 +117,29 @@
 </script>
 
 <div class="detail">
-  <button class="retour" onclick={onFermer}>← Retour</button>
-
-  <div class="entete">
-    <span class="ub">{report.UB_id}</span>
-    <span class="date">{formatDate(report.Reported_at)}</span>
-    {#if report.litige}<span class="tag-litige">En litige</span>{/if}
+  <div class="col-photo">
+    <div class="barre-zoom">
+      <button onclick={() => (zoom = Math.max(1, +(zoom - 0.25).toFixed(2)))} disabled={zoom <= 1}>−</button>
+      <span>{Math.round(zoom * 100)}%</span>
+      <button onclick={() => (zoom = Math.min(4, +(zoom + 0.25).toFixed(2)))} disabled={zoom >= 4}>+</button>
+      {#if zoom !== 1}<button onclick={() => (zoom = 1)}>Réinitialiser</button>{/if}
+    </div>
+    <div class="cadre-photo">
+      {#await urlPhoto(report.Photo) then url}
+        {#if url}<img class="photo" src={url} alt="" style:transform="scale({zoom})" />{:else}<div class="pas-photo"></div>{/if}
+      {/await}
+    </div>
   </div>
 
-  {#await urlPhoto(report.Photo) then url}
-    {#if url}<img class="photo" src={url} alt="" />{/if}
-  {/await}
-
-  <div class="col-diag">
-    <div class="bloc">
-      <div class="bloc-titre">Diagnostic IA d'origine (figé)</div>
-      <div class="bloc-corps">
-        {tagsIa.length ? tagsIa.join(', ') : '(rien détecté)'}
-        {#if report.confiance_ia} — confiance {report.confiance_ia}{/if}
-      </div>
+  <div class="col-info">
+    <div class="entete">
+      <span class="ub">{report.UB_id}</span>
+      <span class="date">{formatDate(report.Reported_at)}</span>
+      {#if report.litige}<span class="tag-litige">En litige</span>{/if}
     </div>
 
     <div class="bloc">
-      <div class="bloc-titre">Déclaration utilisateur</div>
+      <div class="bloc-titre">Ce qui a été vu par l'utilisateur</div>
       <div class="bloc-corps">
         {#if aDeclarationUtilisateur}
           {tagsUt.join(', ')}
@@ -136,92 +148,123 @@
         {/if}
       </div>
     </div>
-  </div>
 
-  {#if aDeclarationUtilisateur}
-    <div class="diff">
-      <div class="diff-grp confirme">
-        <div class="diff-titre">Confirmé (usager ∩ IA) — officiel par défaut</div>
-        <div class="diff-liste">{confirmes.length ? confirmes.join(', ') : '—'}</div>
-      </div>
-      <div class="diff-grp ajoute">
-        <div class="diff-titre">Ajouté par l'IA (absent de la déclaration usager)</div>
-        <div class="diff-liste">{ajoutesParIa.length ? ajoutesParIa.join(', ') : '—'}</div>
-      </div>
-      <div class="diff-grp retire">
-        <div class="diff-titre">Retiré par l'IA (déclaré par l'usager, non confirmé)</div>
-        <div class="diff-liste">{retiresParIa.length ? retiresParIa.join(', ') : '—'}</div>
+    <div class="bloc">
+      <div class="bloc-titre">Ce qui a été détecté par l'IA</div>
+      <div class="bloc-corps">
+        {tagsIa.length ? tagsIa.join(', ') : '(rien détecté)'}
+        {#if report.confiance_ia} — confiance {report.confiance_ia}{/if}
       </div>
     </div>
-  {/if}
 
-  {#if suggestionsEquivalence.length}
-    <div class="bloc suggestion-eq">
-      <div class="bloc-titre">Suggestion (équivalence connue depuis le Catalogue)</div>
+    {#if aDeclarationUtilisateur}
+      <div class="diff">
+        <div class="diff-grp confirme">
+          <div class="diff-titre">Confirmé (usager ∩ IA) — officiel par défaut</div>
+          <div class="diff-liste">{confirmes.length ? confirmes.join(', ') : '—'}</div>
+        </div>
+        <div class="diff-grp ajoute">
+          <div class="diff-titre">Ajouté par l'IA (absent de la déclaration usager)</div>
+          <div class="diff-liste">{ajoutesParIa.length ? ajoutesParIa.join(', ') : '—'}</div>
+        </div>
+        <div class="diff-grp retire">
+          <div class="diff-titre">Retiré par l'IA (déclaré par l'usager, non confirmé)</div>
+          <div class="diff-liste">{retiresParIa.length ? retiresParIa.join(', ') : '—'}</div>
+        </div>
+      </div>
+    {/if}
+
+    {#if suggestionsEquivalence.length}
+      <div class="bloc suggestion-eq">
+        <div class="bloc-titre">Suggestion (équivalence connue depuis le Catalogue)</div>
+        <div class="chips">
+          {#each suggestionsEquivalence as tag}
+            <button class="chip suggere" onclick={() => appliquerSuggestion(tag)}>+ Appliquer « {tag} »</button>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    <div class="bloc">
+      <div class="bloc-titre">
+        Ce qui a été retenu par un Modérateur Humain
+        {#if nomModerateurActuel}
+          <span class="moderateur">— {nomModerateurActuel}{#if report.pondere_le}, le {formatDate(report.pondere_le)}{/if}</span>
+        {/if}
+      </div>
       <div class="chips">
-        {#each suggestionsEquivalence as tag}
-          <button class="chip suggere" onclick={() => appliquerSuggestion(tag)}>+ Appliquer « {tag} »</button>
+        {#each [...selection] as tag}
+          <button class="chip actif" onclick={() => basculer(tag)}>{tag} ×</button>
         {/each}
       </div>
+      <input class="recherche" placeholder="Chercher un tag du catalogue avant d'en créer un nouveau…" bind:value={recherche} />
+      <div class="suggestions">
+        {#each suggestions.slice(0, 12) as t (t.tag)}
+          <button class="chip" onclick={() => basculer(t.tag)}>
+            {#if t.categorie_iver}<span class="cat cat-{t.categorie_iver}">{t.categorie_iver}</span>{/if}
+            {t.tag}{t.propose_par_ia ? ' 🆕' : ''}
+          </button>
+        {/each}
+        {#if rechercheNorm && !exactMatch}
+          <button class="chip nouveau" onclick={creerEtAjouter}>+ Créer « {recherche.trim()} »</button>
+        {/if}
+      </div>
     </div>
-  {/if}
 
-  <div class="bloc">
-    <div class="bloc-titre">Décision du pondérateur</div>
-    <div class="chips">
-      {#each [...selection] as tag}
-        <button class="chip actif" onclick={() => basculer(tag)}>{tag} ×</button>
-      {/each}
+    <div class="bloc">
+      <div class="bloc-titre">Remarque</div>
+      <textarea bind:value={remarque} rows="2"></textarea>
     </div>
-    <input class="recherche" placeholder="Chercher un tag du catalogue avant d'en créer un nouveau…" bind:value={recherche} />
-    <div class="suggestions">
-      {#each suggestions.slice(0, 12) as t (t.tag)}
-        <button class="chip" onclick={() => basculer(t.tag)}>
-          {#if t.categorie_iver}<span class="cat cat-{t.categorie_iver}">{t.categorie_iver}</span>{/if}
-          {t.tag}{t.propose_par_ia ? ' 🆕' : ''}
-        </button>
-      {/each}
-      {#if rechercheNorm && !exactMatch}
-        <button class="chip nouveau" onclick={creerEtAjouter}>+ Créer « {recherche.trim()} »</button>
-      {/if}
+
+    <label class="chk">
+      <input type="checkbox" bind:checked={verifie} />
+      Vérifié par un humain (pondérateur)
+    </label>
+
+    {#if erreur}<p class="erreur">Erreur : {erreur}</p>{/if}
+
+    <div class="actions">
+      <button class="btn" onclick={enregistrer} disabled={enregistrement}>{enregistrement ? 'Enregistrement…' : 'Enregistrer'}</button>
     </div>
-  </div>
-
-  <div class="bloc">
-    <div class="bloc-titre">Remarque</div>
-    <textarea bind:value={remarque} rows="2"></textarea>
-  </div>
-
-  <label class="chk">
-    <input type="checkbox" bind:checked={verifie} />
-    Vérifié par un humain (pondérateur)
-  </label>
-
-  {#if erreur}<p class="erreur">Erreur : {erreur}</p>{/if}
-
-  <div class="actions">
-    <button class="btn" onclick={onFermer} disabled={enregistrement}>Annuler</button>
-    <button class="btn" onclick={enregistrer} disabled={enregistrement}>{enregistrement ? 'Enregistrement…' : 'Enregistrer'}</button>
   </div>
 </div>
 
 <style>
-  .detail { display: flex; flex-direction: column; gap: 0.8rem; }
-  .retour { align-self: flex-start; background: none; border: none; color: #c55a7a; cursor: pointer; font-size: 0.85rem; padding: 0; }
-  .entete { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; color: #999; }
+  /* Photo a gauche (pleine hauteur du bloc), infos a droite -- refonte
+     demandee par Gilles, 2026-09-11 (remplace l'ancien empilement vertical
+     "photo au-dessus, infos en dessous"). */
+  .detail { display: flex; gap: 1rem; height: 100%; min-height: 0; }
+
+  .col-photo { flex: 0 0 46%; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+  .barre-zoom { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .barre-zoom button {
+    background: #1a1a1c; border: 1px solid #333; color: #e8e6e6; border-radius: 6px; width: 26px; height: 26px;
+    cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0;
+  }
+  .barre-zoom button:nth-child(4) { width: auto; padding: 0 10px; font-size: 0.75rem; }
+  .barre-zoom button:disabled { opacity: 0.4; cursor: default; }
+  .barre-zoom span { font-size: 0.78rem; color: #999; min-width: 3.2em; text-align: center; }
+  .cadre-photo {
+    flex: 1; min-height: 0; overflow: auto; display: flex; align-items: center; justify-content: center;
+    background: #0a0a0b; border-radius: 8px;
+  }
+  .photo { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center center; transition: transform 0.15s ease; }
+  .pas-photo { width: 100%; height: 100%; background: #1a1a1c; }
+
+  .col-info { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0.7rem; padding-right: 4px; }
+
+  .entete { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; color: #999; flex-shrink: 0; }
   .ub { color: #e8e6e6; font-weight: 600; }
   .tag-litige { background: #c55a7a; color: #fff; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
-  .photo { width: 100%; max-height: 340px; object-fit: contain; border-radius: 8px; background: #1a1a1c; }
 
-  .col-diag { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
-  @media (max-width: 640px) { .col-diag { grid-template-columns: 1fr; } }
-  .bloc { background: #17171a; border: 1px solid #2a2a2d; border-radius: 8px; padding: 0.6rem 0.8rem; }
+  .bloc { background: #17171a; border: 1px solid #2a2a2d; border-radius: 8px; padding: 0.6rem 0.8rem; flex-shrink: 0; }
   .bloc-titre { font-size: 0.72rem; color: #999; margin-bottom: 4px; }
+  .moderateur { color: #666; font-weight: 400; }
   .bloc-corps { font-size: 0.85rem; color: #e8e6e6; }
   .muted { color: #666; font-style: italic; }
 
-  .diff { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
-  @media (max-width: 640px) { .diff { grid-template-columns: 1fr; } }
+  .diff { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; flex-shrink: 0; }
+  @media (max-width: 900px) { .diff { grid-template-columns: 1fr; } }
   .diff-grp { border-radius: 8px; padding: 0.5rem 0.7rem; font-size: 0.78rem; }
   .diff-grp.confirme { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.35); }
   .diff-grp.ajoute { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.35); }
@@ -243,9 +286,9 @@
 
   textarea { width: 100%; box-sizing: border-box; background: #1a1a1c; border: 1px solid #333; border-radius: 8px; color: #e8e6e6; padding: 8px; font-family: inherit; font-size: 0.82rem; resize: vertical; }
 
-  .chk { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #e8e6e6; cursor: pointer; }
-  .erreur { color: #f87171; font-size: 0.8rem; }
-  .actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .chk { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #e8e6e6; cursor: pointer; flex-shrink: 0; }
+  .erreur { color: #f87171; font-size: 0.8rem; flex-shrink: 0; }
+  .actions { display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; }
   /* Charte graphique §7 (2026-09-04) : jamais de fond plein par defaut --
      Enregistrer reste banal (texte neutre), pas de traitement "deja actif". */
   .btn { background: #1a1a1c; border: 1px solid #333; color: #e8e6e6; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 0.85rem; }

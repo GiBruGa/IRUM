@@ -32,7 +32,7 @@
     </div>
     <nav>
       <button class:actif={onglet === 'catalogue'} onclick={() => (onglet = 'catalogue')}>Catalogue Tag IVER</button>
-      <button class:actif={onglet === 'ponderation'} onclick={() => (onglet = 'ponderation')}>Pondération</button>
+      <button class:actif={onglet === 'ponderation'} onclick={() => (onglet = 'ponderation')}>Modération Détection IVER</button>
     </nav>
     <div class="marque">
       <span class="marque-texte">
@@ -43,7 +43,7 @@
     </div>
   </header>
 
-  <main class:pleine-hauteur={onglet === 'catalogue'}>
+  <main class:pleine-hauteur={onglet === 'catalogue' || onglet === 'ponderation'}>
     {#if onglet === 'catalogue'}
       <Catalogue />
     {:else if onglet === 'ponderation'}

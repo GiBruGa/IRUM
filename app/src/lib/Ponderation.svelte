@@ -3,9 +3,14 @@
   import { onMount } from 'svelte'
   import DetailPhoto from './DetailPhoto.svelte'
 
-  // Pondération : bandeau de revue pour les photos nécessitant un arbitrage
-  // expert. Le statut "en litige" est TOUJOURS dérivé automatiquement, jamais
-  // marqué à la main (demande explicite de Gilles, 2026-09-03) :
+  // "Modération Détection IVER" (ex-"Pondération", renommé 2026-09-11) :
+  // poste de travail persistant, pas une liste puis une page de détail --
+  // photo + infos d'une sélection toujours affichées en haut, bandeau de
+  // vignettes en bas pour changer de photo sans perdre le contexte (refonte
+  // demandée par Gilles, 2026-09-11).
+  //
+  // Le statut "en litige" est TOUJOURS dérivé automatiquement, jamais marqué
+  // à la main (demande explicite de Gilles, 2026-09-03) :
   //   (a) écart entre tags_utilisateur (déclaration usager, SpotSan) et
   //       tags_ia_origine (diagnostic IA figé) sur la même photo, ou
   //   (b) échantillon systématique 1/10 des évaluations IA, pour un contrôle
@@ -26,26 +31,76 @@
   let reports = $state([])
   let taxonomie = $state([])
   let equivalences = $state([])
+  let profils = $state(new Map()) // id moderateur -> {prenom, nom}
   let limite = $state(PAGE)
+  let totalAExpertiser = $state(null)
 
   let litigeSeulement = $state(true)
   let rechercheUb = $state('')
   let dateDe = $state('')
   let dateA = $state('')
 
-  let selection = $state(null) // report actuellement ouvert en detail, ou null
+  let selection = $state(null) // Report_id affiche dans le bloc photo+infos
+
+  // Profil du modérateur connecté -- proposé au premier usage si prénom/nom
+  // manquent. Aucun champ de ce genre n'existait avant cette refonte
+  // (2026-09-11) : ni display_name (jamais rempli), ni email/nom sur le
+  // compte de Gilles lui-même (identité tel+password uniquement) --
+  // nécessaire pour afficher "qui a pondéré" sur chaque photo.
+  let profilCourant = $state(null)
+  let profilPrenom = $state('')
+  let profilNom = $state('')
+  let profilEnregistrement = $state(false)
+
+  async function chargerProfil() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase.from('profiles').select('id,prenom,nom').eq('id', user.id).maybeSingle()
+    profilCourant = data || { id: user.id, prenom: null, nom: null }
+    profilPrenom = profilCourant.prenom || ''
+    profilNom = profilCourant.nom || ''
+  }
+  async function enregistrerProfil() {
+    profilEnregistrement = true
+    erreur = ''
+    try {
+      const { error } = await supabase.from('profiles')
+        .upsert({ id: profilCourant.id, prenom: profilPrenom.trim() || null, nom: profilNom.trim() || null })
+      if (error) throw error
+      profilCourant = { ...profilCourant, prenom: profilPrenom.trim() || null, nom: profilNom.trim() || null }
+      profils = new Map(profils).set(profilCourant.id, { prenom: profilCourant.prenom, nom: profilCourant.nom })
+    } catch (e) { erreur = e.message } finally { profilEnregistrement = false }
+  }
+
+  function appliquerFiltres(requete) {
+    let r = requete
+    if (rechercheUb.trim()) r = r.ilike('UB_id', `%${rechercheUb.trim()}%`)
+    if (dateDe) r = r.gte('Reported_at', dateDe)
+    if (dateA) r = r.lte('Reported_at', dateA + 'T23:59:59')
+    return r
+  }
+
+  // "A expertiser au total" = pas encore verifie par un humain, sur les
+  // memes filtres UB/date -- volontairement independant du calcul de litige
+  // (derive cote client depuis les tags, pas repliquable simplement en SQL
+  // pur) : Gilles voulait un vrai total, pas seulement ce qui est charge en
+  // cache (2026-09-11).
+  async function compterTotal() {
+    let req = supabase.from('Incident_Reports').select('Report_id', { count: 'exact', head: true }).eq('verifie_humain', false)
+    req = appliquerFiltres(req)
+    const { count } = await req
+    totalAExpertiser = count ?? null
+  }
 
   async function charger() {
     chargement = true
     erreur = ''
     let requete = supabase
       .from('Incident_Reports')
-      .select('Report_id,UB_id,Photo,Description,Reported_at,verifie_humain,confiance_ia,tags_ia_origine,tags_utilisateur')
+      .select('Report_id,UB_id,Photo,Description,Reported_at,verifie_humain,confiance_ia,tags_ia_origine,tags_utilisateur,pondere_par,pondere_le')
       .order('Reported_at', { ascending: false })
       .limit(limite)
-    if (rechercheUb.trim()) requete = requete.ilike('UB_id', `%${rechercheUb.trim()}%`)
-    if (dateDe) requete = requete.gte('Reported_at', dateDe)
-    if (dateA) requete = requete.lte('Reported_at', dateA + 'T23:59:59')
+    requete = appliquerFiltres(requete)
 
     const [repRes, taxRes, eqRes] = await Promise.all([
       requete,
@@ -63,10 +118,21 @@
     const tagsByReport = {}
     ;(tagsRes.data || []).forEach((t) => { (tagsByReport[t.report_id] ||= []).push(t.tag) })
 
+    // Profils des modérateurs déjà présents sur ce lot -- un seul aller-retour.
+    const idsModerateurs = [...new Set((repRes.data || []).map((r) => r.pondere_par).filter(Boolean))]
+    if (idsModerateurs.length) {
+      const { data: profData } = await supabase.from('profiles').select('id,prenom,nom').in('id', idsModerateurs)
+      const m = new Map(profils)
+      ;(profData || []).forEach((p) => m.set(p.id, { prenom: p.prenom, nom: p.nom }))
+      profils = m
+    }
+
     reports = (repRes.data || []).map((r) => ({ ...r, tags_actuels: tagsByReport[r.Report_id] || [] }))
+    if (selection === null && reports.length) selection = reports[0].Report_id
     chargement = false
+    compterTotal()
   }
-  onMount(charger)
+  onMount(() => { chargerProfil(); charger() })
 
   // (a) ecart utilisateur/IA -- seulement calculable si les deux existent.
   // (b) 1/10 systematique parmi les photos passees par l'IA -- Report_id
@@ -85,9 +151,17 @@
 
   const enrichis = $derived(reports.map((r) => ({ ...r, litige: estLitige(r) })))
   const filtres = $derived(litigeSeulement ? enrichis.filter((r) => r.litige) : enrichis)
+  const reportSelectionne = $derived(enrichis.find((r) => r.Report_id === selection) || null)
 
   function formatDate(iso) {
     return new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+  }
+  function nomModerateur(id) {
+    if (!id) return null
+    const p = profils.get(id)
+    if (!p) return null
+    const nom = [p.prenom, p.nom].filter(Boolean).join(' ')
+    return nom || null
   }
 
   const urlCache = new Map()
@@ -99,12 +173,11 @@
     return p
   }
 
-  function ouvrir(r) { selection = r }
-  function fermer() { selection = null; charger() }
+  function apresEnregistrement() { charger() }
 </script>
 
 {#snippet vignette(r)}
-  <button class="carte-photo" class:litige={r.litige} onclick={() => ouvrir(r)}>
+  <button class="carte-photo" class:litige={r.litige} class:actif={r.Report_id === selection} onclick={() => (selection = r.Report_id)}>
     {#await urlPhoto(r.Photo) then url}
       {#if url}<img src={url} alt="" />{:else}<div class="pas-photo"></div>{/if}
     {/await}
@@ -115,59 +188,118 @@
   </button>
 {/snippet}
 
-<div class="ponderation">
+<div class="moderation">
   {#if erreur}<p class="erreur">Erreur : {erreur}</p>{/if}
 
-  {#if selection}
-    {@render detail(selection)}
+  {#if profilCourant && (!profilCourant.prenom || !profilCourant.nom)}
+    <div class="banniere-profil">
+      <span>Complète ton nom pour qu'il apparaisse sur les photos que tu pondères :</span>
+      <input placeholder="Prénom" bind:value={profilPrenom} />
+      <input placeholder="Nom" bind:value={profilNom} />
+      <button onclick={enregistrerProfil} disabled={profilEnregistrement}>{profilEnregistrement ? 'Enregistrement…' : 'Enregistrer'}</button>
+    </div>
+  {/if}
+
+  <div class="barre">
+    <label class="chk">
+      <input type="checkbox" bind:checked={litigeSeulement} />
+      En litige seulement ({enrichis.filter((r) => r.litige).length})
+    </label>
+    <input class="recherche" placeholder="Sanitaire (UB_id)…" bind:value={rechercheUb} onchange={charger} />
+    <input type="date" bind:value={dateDe} onchange={charger} title="Du" />
+    <input type="date" bind:value={dateA} onchange={charger} title="Au" />
+  </div>
+
+  {#if chargement}
+    <p class="info">Chargement…</p>
   {:else}
-    <div class="barre">
-      <label class="chk">
-        <input type="checkbox" bind:checked={litigeSeulement} />
-        En litige seulement ({enrichis.filter((r) => r.litige).length})
-      </label>
-      <input class="recherche" placeholder="Sanitaire (UB_id)…" bind:value={rechercheUb} onchange={charger} />
-      <input type="date" bind:value={dateDe} onchange={charger} title="Du" />
-      <input type="date" bind:value={dateA} onchange={charger} title="Au" />
+    <div class="corps">
+      {#if reportSelectionne}
+        {#key reportSelectionne.Report_id}
+          <DetailPhoto
+            report={reportSelectionne}
+            {taxonomie}
+            {equivalences}
+            {urlPhoto}
+            nomModerateurActuel={nomModerateur(reportSelectionne.pondere_par)}
+            onEnregistre={apresEnregistrement}
+          />
+        {/key}
+      {:else}
+        <p class="vide">Aucune photo {litigeSeulement ? 'en litige ' : ''}pour ces filtres.</p>
+      {/if}
     </div>
 
-    {#if chargement}
-      <p class="info">Chargement…</p>
-    {:else}
-      <div class="grille">
+    <div class="bandeau-vignettes">
+      <div class="entete-vignettes">
+        <span>
+          {totalAExpertiser !== null ? `${totalAExpertiser} photo${totalAExpertiser > 1 ? 's' : ''} à expertiser au total` : '…'}
+          ({reports.length} chargée{reports.length > 1 ? 's' : ''} en cache)
+        </span>
+        {#if reports.length === limite}
+          <button class="charger-plus" onclick={() => { limite += PAGE; charger() }}>Charger un lot de plus</button>
+        {/if}
+      </div>
+      <div class="grille-vignettes">
         {#each filtres as r (r.Report_id)}
           {@render vignette(r)}
         {/each}
+        {#if !filtres.length}<p class="vide">Aucune photo {litigeSeulement ? 'en litige' : ''} pour ces filtres.</p>{/if}
       </div>
-      {#if !filtres.length}<p class="vide">Aucune photo {litigeSeulement ? 'en litige' : ''} pour ces filtres.</p>{/if}
-      {#if reports.length === limite}
-        <button class="charger-plus" onclick={() => { limite += PAGE; charger() }}>Charger plus</button>
-      {/if}
-    {/if}
+    </div>
   {/if}
 </div>
 
-{#snippet detail(r)}
-  <DetailPhoto report={r} {taxonomie} {equivalences} onFermer={fermer} {urlPhoto} />
-{/snippet}
-
 <style>
-  .ponderation { display: flex; flex-direction: column; gap: 1rem; }
-  .barre { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  /* min-height:0 en cascade, meme principe que Catalogue.svelte : permet au
+     bandeau de vignettes de rester a hauteur fixe et au bloc photo+infos de
+     prendre tout le reste, sur la hauteur reelle de la fenetre. */
+  .moderation { display: flex; flex-direction: column; gap: 0.6rem; height: 100%; min-height: 0; }
+  .barre { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; flex-shrink: 0; }
   .chk { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #e8e6e6; cursor: pointer; white-space: nowrap; }
   .recherche, input[type="date"] {
     padding: 7px 10px; border-radius: 8px; border: 1px solid #333; background: #1a1a1c; color: #e8e6e6; font-size: 0.82rem;
   }
   .recherche { flex: 1; min-width: 140px; }
   .info, .vide { color: #999; font-size: 0.85rem; }
-  .erreur { color: #f87171; }
+  .erreur { color: #f87171; flex-shrink: 0; }
 
-  .grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+  .banniere-profil {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0; font-size: 0.82rem; color: #e8e6e6;
+    background: #24151c; border: 1px solid #c55a7a; border-radius: 8px; padding: 8px 12px;
+  }
+  .banniere-profil input {
+    padding: 6px 9px; border-radius: 6px; border: 1px solid #333; background: #1a1a1c; color: #e8e6e6; font-size: 0.8rem; width: 130px;
+  }
+  .banniere-profil button {
+    background: #1a1a1c; border: 1px solid #c55a7a; color: #c55a7a; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 0.8rem;
+  }
+  .banniere-profil button:disabled { opacity: 0.5; cursor: default; }
+
+  .corps { flex: 1; min-height: 0; }
+
+  /* Bandeau de vignettes en bas, pleine largeur, hauteur limitee a ~2 rangees
+     (demande de Gilles, 2026-09-11) -- scroll interne si plus de photos. */
+  .bandeau-vignettes {
+    flex-shrink: 0; display: flex; flex-direction: column; gap: 6px;
+    background: #17171a; border: 1px solid #2a2a2d; border-radius: 10px; padding: 0.6rem 0.7rem;
+  }
+  .entete-vignettes { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.78rem; color: #999; }
+  .charger-plus {
+    background: #1a1a1c; border: 1px solid #333; color: #e8e6e6; border-radius: 8px;
+    padding: 6px 12px; cursor: pointer; font-size: 0.78rem; white-space: nowrap;
+  }
+
+  .grille-vignettes {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); grid-auto-rows: 90px; gap: 8px;
+    max-height: 188px; overflow-y: auto; padding-right: 4px;
+  }
   .carte-photo {
-    position: relative; width: 100%; aspect-ratio: 1; border-radius: 8px; overflow: hidden; cursor: pointer;
+    position: relative; width: 100%; height: 100%; border-radius: 8px; overflow: hidden; cursor: pointer;
     border: 2px solid transparent; background: #1a1a1c; padding: 0;
   }
   .carte-photo.litige { border-color: #c55a7a; }
+  .carte-photo.actif { border-color: #e8e6e6; box-shadow: 0 0 0 2px #17171a, 0 0 0 4px #e8e6e6; }
   .carte-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .pas-photo { width: 100%; height: 100%; background: #26262a; }
   .badge-verif {
@@ -183,9 +315,5 @@
   .legende {
     position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.65); color: #fff; font-size: 0.55rem;
     padding: 2px 4px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .charger-plus {
-    align-self: center; background: #1a1a1c; border: 1px solid #333; color: #e8e6e6; border-radius: 8px;
-    padding: 8px 16px; cursor: pointer; font-size: 0.82rem;
   }
 </style>
