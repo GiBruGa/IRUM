@@ -426,9 +426,18 @@
       // (parent_tag -> null), comme le fait ON DELETE SET NULL cote base --
       // calcule ici seulement (pas dans le brouillon pendant l'edition) pour
       // que "Annuler la suppression" n'ait rien a defaire (2026-09-11).
+      // label/criteres_detection ne sont plus coupés (trim) à chaque frappe
+      // dans FicheIver.svelte (ça effaçait les espaces tapés, cf. bug
+      // 2026-09-11 ci-dessous) -- le nettoyage final n'a donc lieu qu'ici,
+      // une seule fois, juste avant l'écriture réelle.
       const survivants = brouillon
         .filter((t) => !suppressions.has(t.tag))
-        .map((t) => (t.parent_tag && suppressions.has(t.parent_tag) ? { ...t, parent_tag: null } : t))
+        .map((t) => ({
+          ...t,
+          parent_tag: t.parent_tag && suppressions.has(t.parent_tag) ? null : t.parent_tag,
+          label: typeof t.label === 'string' ? t.label.trim() : t.label,
+          criteres_detection: typeof t.criteres_detection === 'string' ? (t.criteres_detection.trim() || null) : t.criteres_detection,
+        }))
       const enfantsFinal = {}
       survivants.forEach((t) => { if (t.parent_tag) (enfantsFinal[t.parent_tag] ||= []).push(t) })
 
@@ -450,6 +459,25 @@
 
       const original = new Map(taxonomie.map((t) => [t.tag, t]))
       const champsSurveilles = ['parent_tag', 'categorie_iver', 'ordre', 'actif', 'propose_par_ia', 'label', 'criteres_detection', 'propose_utilisateur']
+
+      // Passe 0 : neutralise d'abord tout cle qui va changer, avec une valeur
+      // temporaire garantie unique (prefixee "~", jamais produite par
+      // calculerCle) -- `cle` porte une contrainte UNIQUE simple (pas
+      // DEFERRABLE, et de toute facon chaque appel Supabase est sa propre
+      // transaction auto-committee, donc un DEFERRABLE n'aiderait pas ici).
+      // Sans cette passe, un reordonnancement qui echange deux cle (le
+      // nouveau cle de A = l'ancien cle de B, pas encore ecrit) declenche une
+      // violation de contrainte transitoire meme si l'etat final est valide
+      // -- bug reel, 2026-09-11 ("duplicate key value violates unique
+      // constraint incivilites_taxonomie_cle_key").
+      for (const b of survivants) {
+        const cle = nouvellesCles.get(b.tag) ?? b.cle
+        const orig = original.get(b.tag)
+        if (orig && cle !== orig.cle) {
+          await majOuErreur(supabase.from('Incivilites_Taxonomie').update({ cle: `~${b.tag}` }).eq('tag', b.tag))
+        }
+      }
+
       for (const b of survivants) {
         const cle = nouvellesCles.get(b.tag) ?? b.cle
         const orig = original.get(b.tag)

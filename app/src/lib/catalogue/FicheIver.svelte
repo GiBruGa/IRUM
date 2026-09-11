@@ -24,14 +24,22 @@
     erreurLabel = ''
   })
 
+  // IMPORTANT : ne jamais trim() ici (bug reel, 2026-09-11 -- "impossible de
+  // taper une espace"). Modifier le brouillon reassigne Catalogue.svelte's
+  // `brouillon`, ce qui redonne un `noeud` de reference differente a chaque
+  // frappe et refait tourner le $effect ci-dessus -- si la valeur stagee
+  // etait trim(), elle differait de ce que l'utilisateur venait de taper
+  // (avec une espace en fin), et l'effet ecrasait aussitot l'espace tapee.
+  // Le nettoyage final (trim) n'a lieu qu'une fois, a la validation
+  // (Catalogue.svelte's validerMiseAJour), jamais ici.
   function surLabel() {
     if (!label.trim()) { erreurLabel = 'Le label ne peut pas être vide.'; return }
     if (label.length > 50) { erreurLabel = 'Le label doit faire au plus 50 caractères.'; return }
     erreurLabel = ''
-    onEnregistrer(noeud.tag, { label: label.trim() })
+    onEnregistrer(noeud.tag, { label })
   }
   function surRemarques() {
-    onEnregistrer(noeud.tag, { criteres_detection: remarques.trim() || null })
+    onEnregistrer(noeud.tag, { criteres_detection: remarques })
   }
   function surProposeUtilisateur(e) {
     onEnregistrer(noeud.tag, { propose_utilisateur: e.currentTarget.checked })
@@ -41,17 +49,19 @@
 <div class="fiche">
   <div class="titre">Fiche IVER</div>
 
-  <!-- Clé + Label + case SpotSan sur une seule ligne pour plus de compacité,
-       et la case juste à la suite de la clé pour la mettre en évidence
-       (demandes de Gilles, 2026-09-11). -->
+  <!-- Clé + case SpotSan + Label sur une seule ligne pour plus de compacité
+       (demande de Gilles, 2026-09-11) -- la case juste après la clé pour la
+       mettre en évidence, avant le Label pour plus d'ergonomie (reprécisé
+       le même jour : la case se manipule plus souvent que le texte du label
+       n'est relu). -->
   <div class="ligne-principale">
     <span class="cle" title="Clé">{noeud.cle}</span>
-    <input class="entree-label" bind:value={label} maxlength="50" oninput={surLabel} placeholder="Label" />
-    <span class="compteur">{label.length}/50</span>
     <label class="case-spotsan" title="Retenu pour Utilisateurs SpotSan">
       <input type="checkbox" checked={noeud.propose_utilisateur || false} onchange={surProposeUtilisateur} />
       <span>SpotSan</span>
     </label>
+    <input class="entree-label" bind:value={label} maxlength="50" oninput={surLabel} placeholder="Label" />
+    <span class="compteur">{label.length}/50</span>
   </div>
   {#if erreurLabel}<p class="erreur">{erreurLabel}</p>{/if}
 
