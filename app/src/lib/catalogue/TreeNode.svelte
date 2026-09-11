@@ -83,13 +83,12 @@
       onclick={(e) => { e.stopPropagation(); surBascule(noeud.tag) }}
       tabindex="-1"
     >{aDesEnfants ? (estOuvert ? '▾' : '▸') : ''}</button>
-    {#if noeud.categorie_iver}
-      <span
-        class="cat cat-{noeud.categorie_iver}"
-        class:retenu={noeud.propose_utilisateur}
-        title={noeud.propose_utilisateur ? 'Retenu pour Utilisateurs SpotSan' : 'Non retenu pour Utilisateurs SpotSan'}
-      >{noeud.categorie_iver}</span>
-    {/if}
+    {#if noeud.categorie_iver}<span class="cat cat-{noeud.categorie_iver}">{noeud.categorie_iver}</span>{/if}
+    <span
+      class="marque-spotsan"
+      class:actif={noeud.propose_utilisateur}
+      title={noeud.propose_utilisateur ? 'Retenu pour Utilisateurs SpotSan' : 'Non retenu pour Utilisateurs SpotSan'}
+    ></span>
     <span class="cle">{noeud.cle}</span>
     <span class="label">{noeud.label}{noeud.propose_par_ia ? ' 🆕' : ''}</span>
     {#if zone}
@@ -142,16 +141,21 @@
     font-size: 0.7rem; padding: 0;
   }
   .bascule.invisible { visibility: hidden; }
-  /* Deux nuances tranchées par catégorie (demande de Gilles, 2026-09-11) :
-     teinte claire = pas retenu pour SpotSan, teinte foncée = propose_utilisateur
-     coché -- toujours colore (jamais gris/invisible), juste plus ou moins
-     soutenu, pour rester lisible d'un coup d'oeil dans toute l'arborescence. */
-  .cat { font-size: 0.6rem; font-weight: 700; border-radius: 4px; padding: 0 4px; color: #1a1a1c; flex-shrink: 0; }
-  .cat.retenu { color: #fff; }
-  .cat-I { background: #93c5fd; } .cat-I.retenu { background: #1d4ed8; }
-  .cat-V { background: #fca5a5; } .cat-V.retenu { background: #b91c1c; }
-  .cat-E { background: #fcd34d; } .cat-E.retenu { background: #b45309; }
-  .cat-R { background: #c4b5fd; } .cat-R.retenu { background: #6d28d9; }
+  /* Badge catégorie : une seule couleur fixe par lettre (identique aux
+     entêtes de Catalogue.svelte) -- ne varie plus selon "retenu SpotSan"
+     (retour de Gilles, 2026-09-11 : associer ça à une nuance de la couleur
+     catégorie prêtait à confusion, "la couleur de la catégorie = ce qui est
+     valide/opérationnel" est une lecture instinctive à ne pas casser). */
+  .cat { font-size: 0.6rem; font-weight: 700; border-radius: 4px; padding: 0 4px; color: #fff; flex-shrink: 0; }
+  .cat-I { background: #3b82f6; } .cat-V { background: #ef4444; } .cat-E { background: #f59e0b; } .cat-R { background: #8b5cf6; }
+  /* Indicateur "retenu pour SpotSan" séparé de la catégorie, toujours visible
+     dans une couleur neutre sans rapport avec la teinte de catégorie -- un
+     point plein vert = retenu, un point creux gris = pas retenu. */
+  .marque-spotsan {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; box-sizing: border-box;
+    background: transparent; border: 1.5px solid #666;
+  }
+  .marque-spotsan.actif { background: #22c55e; border-color: #22c55e; }
   .cle { color: #888; font-size: 0.72rem; font-family: ui-monospace, monospace; flex-shrink: 0; }
   .label { flex: 1; color: #e8e6e6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
