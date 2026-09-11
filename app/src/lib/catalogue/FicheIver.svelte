@@ -1,42 +1,45 @@
 <script>
   let { noeud, onEnregistrer, onSupprimer } = $props()
 
+  // Chaque champ applique directement au brouillon (onEnregistrer =
+  // Catalogue.svelte's enregistrerFiche, une simple ecriture locale, jamais
+  // Supabase) -- PAS de bouton "Enregistrer" separe. Corrige un vrai bug
+  // signale par Gilles, 2026-09-11 : avec un bouton Enregistrer propre a la
+  // Fiche, en plus du bouton global "Valider les modifications", cocher une
+  // case sans cliquer sur CE bouton-ci ne mettait rien en attente -- deux
+  // niveaux de brouillon distincts, confus, et la case cochee se perdait
+  // silencieusement. Un seul niveau maintenant : tout champ modifie ici part
+  // immediatement dans le brouillon global, seul "Valider" (dans l'entete du
+  // Catalogue) ecrit reellement dans Supabase.
   let label = $state(noeud.label)
   let remarques = $state(noeud.criteres_detection || '')
-  let proposeUtilisateur = $state(noeud.propose_utilisateur || false)
-  let enregistrement = $state(false)
+  let erreurLabel = $state('')
   let suppression = $state(false)
-  let erreur = $state('')
 
   $effect(() => {
     label = noeud.label
     remarques = noeud.criteres_detection || ''
-    proposeUtilisateur = noeud.propose_utilisateur || false
-    erreur = ''
+    erreurLabel = ''
   })
 
-  async function enregistrer() {
-    if (!label.trim()) { erreur = 'Le label ne peut pas être vide.'; return }
-    if (label.length > 50) { erreur = 'Le label doit faire au plus 50 caractères.'; return }
-    enregistrement = true
-    erreur = ''
-    try {
-      await onEnregistrer(noeud.tag, { label: label.trim(), criteres_detection: remarques.trim() || null, propose_utilisateur: proposeUtilisateur })
-    } catch (e) {
-      erreur = e.message
-    } finally {
-      enregistrement = false
-    }
+  function surLabel() {
+    if (!label.trim()) { erreurLabel = 'Le label ne peut pas être vide.'; return }
+    if (label.length > 50) { erreurLabel = 'Le label doit faire au plus 50 caractères.'; return }
+    erreurLabel = ''
+    onEnregistrer(noeud.tag, { label: label.trim() })
+  }
+  function surRemarques() {
+    onEnregistrer(noeud.tag, { criteres_detection: remarques.trim() || null })
+  }
+  function surProposeUtilisateur(e) {
+    onEnregistrer(noeud.tag, { propose_utilisateur: e.currentTarget.checked })
   }
 
   async function supprimer() {
     if (!confirm(`Marquer le tag « ${noeud.label} » (clé ${noeud.cle}) pour suppression ? Elle sera appliquée lors de la validation du catalogue.`)) return
     suppression = true
-    erreur = ''
     try {
       await onSupprimer(noeud.tag)
-    } catch (e) {
-      erreur = e.message
     } finally {
       suppression = false
     }
@@ -49,27 +52,23 @@
 
   <label class="champ">
     <span>Label <span class="compteur">({label.length}/50)</span></span>
-    <input bind:value={label} maxlength="50" />
+    <input bind:value={label} maxlength="50" oninput={surLabel} />
   </label>
+  {#if erreurLabel}<p class="erreur">{erreurLabel}</p>{/if}
 
   <label class="champ">
     <span>Remarques</span>
-    <textarea bind:value={remarques} rows="4"></textarea>
+    <textarea bind:value={remarques} rows="4" oninput={surRemarques}></textarea>
   </label>
 
   <label class="champ-case">
-    <input type="checkbox" bind:checked={proposeUtilisateur} />
+    <input type="checkbox" checked={noeud.propose_utilisateur || false} onchange={surProposeUtilisateur} />
     <span>Retenu pour Utilisateurs SpotSan</span>
   </label>
 
-  {#if erreur}<p class="erreur">{erreur}</p>{/if}
-
   <div class="actions">
-    <button class="btn-supprimer" onclick={supprimer} disabled={enregistrement || suppression}>
+    <button class="btn-supprimer" onclick={supprimer} disabled={suppression}>
       {suppression ? 'Suppression…' : 'Supprimer'}
-    </button>
-    <button class="btn-enregistrer" onclick={enregistrer} disabled={enregistrement || suppression}>
-      {enregistrement ? 'Enregistrement…' : 'Enregistrer'}
     </button>
   </div>
 </div>
@@ -91,13 +90,9 @@
   /* Charte graphique §7 (2026-09-04) : jamais de fond plein par defaut sur
      un bouton d'action -- le fond reste neutre, seule la couleur du texte
      distingue banal (neutre) de mis en exergue (#C55A7A). */
-  .btn-enregistrer {
-    background: #1a1a1c; border: 1px solid #333; color: #e8e6e6; border-radius: 999px; padding: 9px 16px;
-    cursor: pointer; font-size: 0.85rem; font-weight: 600;
-  }
   .btn-supprimer {
     background: #1a1a1c; border: 1px solid #c55a7a; color: #c55a7a; border-radius: 999px; padding: 9px 16px;
     cursor: pointer; font-size: 0.85rem; font-weight: 600;
   }
-  .btn-enregistrer:disabled, .btn-supprimer:disabled { opacity: 0.5; cursor: default; }
+  .btn-supprimer:disabled { opacity: 0.5; cursor: default; }
 </style>
