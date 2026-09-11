@@ -22,12 +22,26 @@
   let selection = $state(new Set(report.tags_actuels || []))
   let recherche = $state('')
   let remarque = $state(report.Description || '')
-  let verifie = $state(true)
   let enregistrement = $state(false)
   let erreur = $state('')
   // Zoom manuel de la photo (demande de Gilles, 2026-09-11) -- pour pouvoir
-  // faire sa propre expertise visuelle avant de trancher.
+  // faire sa propre expertise visuelle avant de trancher. origineX/Y pilote
+  // le transform-origin : molette+Ctrl recentre le zoom sous le curseur
+  // (comme un logiciel d'image), pas seulement un zoom centre sur l'image --
+  // les boutons +/- restent un zoom centre simple, plus previsible au clic.
   let zoom = $state(1)
+  let origineX = $state(50)
+  let origineY = $state(50)
+
+  function surMolette(e) {
+    if (!e.ctrlKey && !e.metaKey) return // laisse le scroll normal de la fenetre tranquille
+    e.preventDefault()
+    const rect = e.currentTarget.getBoundingClientRect()
+    origineX = ((e.clientX - rect.left) / rect.width) * 100
+    origineY = ((e.clientY - rect.top) / rect.height) * 100
+    const pas = e.deltaY < 0 ? 0.2 : -0.2
+    zoom = Math.min(4, Math.max(1, +(zoom + pas).toFixed(2)))
+  }
 
   // Suggestion automatique (2026-09-04, demande de Gilles) : si un tag IA
   // d'origine a une equivalence connue (declaree dans le Catalogue) qui n'est
@@ -78,10 +92,14 @@
       // seulement, ecrasees a chaque enregistrement -- pas d'historique
       // (demande explicite de Gilles, 2026-09-11).
       const { data: { user } } = await supabase.auth.getUser()
+      // verifie_humain force a true : enregistrer une decision ICI est en
+      // soi l'acte de verification -- plus de case a cocher separee, qui
+      // faisait doublon avec "pondere_par/pondere_le" (retour de Gilles,
+      // 2026-09-11).
       const upd = await supabase.from('Incident_Reports')
         .update({
           Description: remarque.trim() || null,
-          verifie_humain: verifie,
+          verifie_humain: true,
           pondere_par: user?.id ?? null,
           pondere_le: new Date().toISOString(),
         })
@@ -123,10 +141,21 @@
       <span>{Math.round(zoom * 100)}%</span>
       <button onclick={() => (zoom = Math.min(4, +(zoom + 0.25).toFixed(2)))} disabled={zoom >= 4}>+</button>
       {#if zoom !== 1}<button onclick={() => (zoom = 1)}>Réinitialiser</button>{/if}
+      <span class="astuce-zoom">Ctrl+molette pour zoomer sous le curseur</span>
     </div>
-    <div class="cadre-photo">
+    <div class="cadre-photo" onwheel={surMolette}>
       {#await urlPhoto(report.Photo) then url}
-        {#if url}<img class="photo" src={url} alt="" style:transform="scale({zoom})" />{:else}<div class="pas-photo"></div>{/if}
+        {#if url}
+          <img
+            class="photo"
+            src={url}
+            alt=""
+            style:transform="scale({zoom})"
+            style:transform-origin="{origineX}% {origineY}%"
+          />
+        {:else}
+          <div class="pas-photo"></div>
+        {/if}
       {/await}
     </div>
   </div>
@@ -188,8 +217,10 @@
     <div class="bloc">
       <div class="bloc-titre">
         Ce qui a été retenu par un Modérateur Humain
-        {#if nomModerateurActuel}
-          <span class="moderateur">— {nomModerateurActuel}{#if report.pondere_le}, le {formatDate(report.pondere_le)}{/if}</span>
+        {#if nomModerateurActuel && report.pondere_le}
+          <span class="statut-verif">— Vérifié par {nomModerateurActuel}, le {formatDate(report.pondere_le)}</span>
+        {:else}
+          <span class="statut-verif non-verifie">— Pas encore vérifié par un modérateur</span>
         {/if}
       </div>
       <div class="chips">
@@ -216,11 +247,6 @@
       <textarea bind:value={remarque} rows="2"></textarea>
     </div>
 
-    <label class="chk">
-      <input type="checkbox" bind:checked={verifie} />
-      Vérifié par un humain (pondérateur)
-    </label>
-
     {#if erreur}<p class="erreur">Erreur : {erreur}</p>{/if}
 
     <div class="actions">
@@ -244,6 +270,7 @@
   .barre-zoom button:nth-child(4) { width: auto; padding: 0 10px; font-size: 0.75rem; }
   .barre-zoom button:disabled { opacity: 0.4; cursor: default; }
   .barre-zoom span { font-size: 0.78rem; color: #999; min-width: 3.2em; text-align: center; }
+  .astuce-zoom { color: #666 !important; font-size: 0.72rem !important; min-width: 0 !important; margin-left: 4px; }
   .cadre-photo {
     flex: 1; min-height: 0; overflow: auto; display: flex; align-items: center; justify-content: center;
     background: #0a0a0b; border-radius: 8px;
@@ -258,8 +285,11 @@
   .tag-litige { background: #c55a7a; color: #fff; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
 
   .bloc { background: #17171a; border: 1px solid #2a2a2d; border-radius: 8px; padding: 0.6rem 0.8rem; flex-shrink: 0; }
-  .bloc-titre { font-size: 0.72rem; color: #999; margin-bottom: 4px; }
-  .moderateur { color: #666; font-weight: 400; }
+  /* Titres plus gros/en evidence (retour de Gilles, 2026-09-11) : "qui a dit
+     quoi" doit se lire d'un coup d'oeil, pas se deviner dans un petit gris. */
+  .bloc-titre { font-size: 0.92rem; font-weight: 700; color: #e8e6e6; margin-bottom: 6px; }
+  .statut-verif { font-size: 0.72rem; font-weight: 400; color: #22c55e; }
+  .statut-verif.non-verifie { color: #666; font-style: italic; }
   .bloc-corps { font-size: 0.85rem; color: #e8e6e6; }
   .muted { color: #666; font-style: italic; }
 
@@ -286,7 +316,6 @@
 
   textarea { width: 100%; box-sizing: border-box; background: #1a1a1c; border: 1px solid #333; border-radius: 8px; color: #e8e6e6; padding: 8px; font-family: inherit; font-size: 0.82rem; resize: vertical; }
 
-  .chk { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #e8e6e6; cursor: pointer; flex-shrink: 0; }
   .erreur { color: #f87171; font-size: 0.8rem; flex-shrink: 0; }
   .actions { display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; }
   /* Charte graphique §7 (2026-09-04) : jamais de fond plein par defaut --
