@@ -41,7 +41,15 @@
   let taxonomie = $state([]) // etat serveur (verite), rafraichi par charger()/apres validation
   let brouillon = $state([]) // copie de travail locale -- toutes les actions d'arborescence n'ecrivent qu'ici
   let suppressions = $state(new Set()) // tags marques pour suppression, appliquee a la validation
-  let equivalencesEnAttente = $state([]) // [{texteIa, cibleTag}] a inserer dans Tags_IA_Equivalences a la validation
+  // Equivalences (texte IA -> tag officiel) : meme principe brouillon/original
+  // que le reste (demande de Gilles, 2026-09-11 -- "il faut compter
+  // correctement et assurer le passage du cache vers Supabase seulement a la
+  // validation"). equivalences = etat serveur ; equivalencesBrouillon = Map
+  // texte_ia -> tag en cours d'edition (ajout, reassociation ET dissociation
+  // sont juste des ecritures/suppressions dans cette Map, diffee contre
+  // equivalences a la validation).
+  let equivalences = $state([])
+  let equivalencesBrouillon = $state(new Map())
   let chargement = $state(true)
   let erreur = $state('')
   let recherche = $state('')
@@ -68,15 +76,19 @@
 
   async function charger() {
     chargement = true
-    const { data, error } = await supabase
-      .from('Incivilites_Taxonomie')
-      .select('tag,actif,ordre,categorie_iver,criteres_detection,propose_par_ia,parent_tag,label,cle,propose_utilisateur')
-      .order('ordre')
-    if (error) { erreur = error.message; chargement = false; return }
-    taxonomie = data || []
+    const [taxRes, eqRes] = await Promise.all([
+      supabase
+        .from('Incivilites_Taxonomie')
+        .select('tag,actif,ordre,categorie_iver,criteres_detection,propose_par_ia,parent_tag,label,cle,propose_utilisateur')
+        .order('ordre'),
+      supabase.from('Tags_IA_Equivalences').select('texte_ia,tag'),
+    ])
+    if (taxRes.error) { erreur = taxRes.error.message; chargement = false; return }
+    taxonomie = taxRes.data || []
     brouillon = taxonomie.map((t) => ({ ...t }))
     suppressions = new Set()
-    equivalencesEnAttente = []
+    equivalences = eqRes.data || []
+    equivalencesBrouillon = new Map(equivalences.map((e) => [e.texte_ia, e.tag]))
     chargement = false
   }
   onMount(charger)
@@ -225,10 +237,32 @@
     modifierBrouillon(tagIA, { parent_tag: null, categorie_iver: categorieCode, ordre: position, propose_par_ia: false })
   }
 
+  // Declare OU reassocie (meme operation : ecrase juste la cible dans la
+  // Map) -- glisser un texte IA (Suggérés, ou deja Associé a un autre tag)
+  // sur une ligne de l'arbre passe toujours par ici.
   function declarerEquivalence(texteIa, cibleTag) {
     modifierBrouillon(texteIa, { actif: false, propose_par_ia: false })
-    equivalencesEnAttente = [...equivalencesEnAttente, { texteIa, cibleTag }]
+    equivalencesBrouillon = new Map(equivalencesBrouillon).set(texteIa, cibleTag)
   }
+
+  // Dissocier (bouton "×" de l'encart Associés, 2026-09-11) : le texte IA
+  // redevient un simple tag suggere, comme s'il n'avait jamais ete rattache.
+  function dissocierEquivalence(texteIa) {
+    modifierBrouillon(texteIa, { actif: true, propose_par_ia: true })
+    const m = new Map(equivalencesBrouillon)
+    m.delete(texteIa)
+    equivalencesBrouillon = m
+  }
+
+  // Textes IA actuellement associes (dans le brouillon) au tag selectionne --
+  // alimente l'encart "Tags IA Associés" (demande de Gilles, 2026-09-11 :
+  // pouvoir verifier la pertinence des equivalences d'un tag apres coup, et
+  // les reassocier/dissocier).
+  const associesDuTagSelectionne = $derived(
+    selection
+      ? [...equivalencesBrouillon.entries()].filter(([, tag]) => tag === selection).map(([texteIa]) => texteIa)
+      : []
+  )
 
   function surGlisserDeposeArbre(action) {
     erreur = ''
@@ -240,6 +274,15 @@
   function surDragStartIA(e, tag) {
     e.dataTransfer.setData('text/x-irum-ia', tag)
     e.dataTransfer.effectAllowed = 'move'
+  }
+
+  let survoleAssocies = $state(false)
+  function surDropAssocies(e) {
+    e.preventDefault()
+    survoleAssocies = false
+    if (!selection) return
+    const texteIa = e.dataTransfer.getData('text/x-irum-ia')
+    if (texteIa) declarerEquivalence(texteIa, selection)
   }
 
   let survoleCategorie = $state(null)
@@ -395,13 +438,23 @@
       if (!o) { n++; continue }
       if (champs.some((c) => b[c] !== o[c])) n++
     }
-    return n + suppressions.size + equivalencesEnAttente.length
+    // Equivalences : ajoutees/reassociees (cible differente de l'original) +
+    // dissociees (presentes dans l'original, absentes du brouillon).
+    const equivOriginales = new Map(equivalences.map((e) => [e.texte_ia, e.tag]))
+    let nEquiv = 0
+    for (const [texteIa, tag] of equivalencesBrouillon) {
+      if (equivOriginales.get(texteIa) !== tag) nEquiv++
+    }
+    for (const texteIa of equivOriginales.keys()) {
+      if (!equivalencesBrouillon.has(texteIa)) nEquiv++
+    }
+    return n + suppressions.size + nEquiv
   })
 
   function annulerModifications() {
     brouillon = taxonomie.map((t) => ({ ...t }))
     suppressions = new Set()
-    equivalencesEnAttente = []
+    equivalencesBrouillon = new Map(equivalences.map((e) => [e.texte_ia, e.tag]))
     erreur = ''
   }
 
@@ -495,10 +548,24 @@
       for (const tag of suppressions) {
         await majOuErreur(supabase.from('Incivilites_Taxonomie').delete().eq('tag', tag))
       }
-      for (const { texteIa, cibleTag } of equivalencesEnAttente) {
-        const { error: eqErr } = await supabase.from('Tags_IA_Equivalences').insert({ texte_ia: texteIa, tag: cibleTag })
-        if (eqErr) throw eqErr
+
+      // Equivalences : diff brouillon vs original, comme le reste --
+      // ajouts/reassociations en upsert (texte_ia est la cle primaire, donc
+      // un upsert couvre les deux cas d'un seul geste), dissociations en delete.
+      const equivOriginales = new Map(equivalences.map((e) => [e.texte_ia, e.tag]))
+      for (const [texteIa, tag] of equivalencesBrouillon) {
+        if (equivOriginales.get(texteIa) !== tag) {
+          const { error: eqErr } = await supabase.from('Tags_IA_Equivalences').upsert({ texte_ia: texteIa, tag })
+          if (eqErr) throw eqErr
+        }
       }
+      for (const texteIa of equivOriginales.keys()) {
+        if (!equivalencesBrouillon.has(texteIa)) {
+          const { error: eqErr } = await supabase.from('Tags_IA_Equivalences').delete().eq('texte_ia', texteIa)
+          if (eqErr) throw eqErr
+        }
+      }
+
       await charger()
     } catch (e) { erreur = e.message } finally { validation = false }
   }
@@ -547,6 +614,34 @@
           {/key}
         {:else}
           <p class="vide">Cliquez un tag dans l'arborescence pour voir sa fiche.</p>
+        {/if}
+      </section>
+
+      <!-- Tags IA Associés (demande de Gilles, 2026-09-11) : liste, pour le
+           tag actuellement sélectionné, les textes IA qui lui sont
+           équivalents -- pour vérifier leur pertinence après coup et les
+           réassocier (glisser vers un autre tag de l'arbre) ou les dissocier
+           (×) sans avoir à fouiller la base. -->
+      <section
+        class="col-associes"
+        class:survole={survoleAssocies}
+        ondragover={(e) => { if (noeudSelectionne) { e.preventDefault(); survoleAssocies = true } }}
+        ondragleave={() => (survoleAssocies = false)}
+        ondrop={(e) => surDropAssocies(e)}
+      >
+        <h2>Tags IA Associés {noeudSelectionne ? `(${associesDuTagSelectionne.length})` : ''}</h2>
+        {#if !noeudSelectionne}
+          <p class="vide">Sélectionnez un tag pour voir ou associer des textes IA.</p>
+        {:else}
+          <div class="liste-associes" role="list">
+            {#each associesDuTagSelectionne as texteIa (texteIa)}
+              <div class="carte-ia carte-associee" role="listitem" draggable="true" ondragstart={(e) => surDragStartIA(e, texteIa)}>
+                <span>{texteIa}</span>
+                <button class="btn-dissocier" title="Dissocier" onclick={() => dissocierEquivalence(texteIa)}>×</button>
+              </div>
+            {/each}
+            {#if !associesDuTagSelectionne.length}<p class="vide">Aucun texte IA associé. Glissez-en un ici depuis « Tags suggérés IA ».</p>{/if}
+          </div>
         {/if}
       </section>
 
@@ -658,13 +753,29 @@
      naturelle (flex-shrink:0), Arborescence prend tout le reste. */
   .col-droite { display: flex; flex-direction: column; gap: 1rem; min-height: 0; }
 
-  .col-ia, .col-arbre, .col-fiche {
+  .col-ia, .col-arbre, .col-fiche, .col-associes {
     background: #17171a; border: 1px solid #2a2a2d; border-radius: 10px; padding: 0.7rem;
   }
   .col-ia { display: flex; flex-direction: column; min-height: 0; }
   .col-fiche { flex-shrink: 0; }
+  /* Comme .col-fiche : hauteur naturelle, ne grandit pas -- l'Arborescence
+     doit garder tout le reste de l'espace disponible. Scroll interne propre
+     si beaucoup de textes IA sont associés au meme tag. */
+  .col-associes { flex-shrink: 0; max-height: 220px; display: flex; flex-direction: column; }
+  .col-associes.survole { border-color: #c55a7a; background: #1c1418; }
   .col-arbre { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   h2 { font-size: 0.82rem; margin: 0 0 0.6rem; color: #e8e6e6; flex-shrink: 0; }
+
+  .liste-associes { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
+  .carte-associee {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px; cursor: grab;
+  }
+  .carte-associee span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .carte-associee:active { cursor: grabbing; }
+  .btn-dissocier {
+    background: transparent; border: none; color: #c55a7a; font-size: 0.95rem; line-height: 1; cursor: pointer;
+    padding: 0 2px; flex-shrink: 0;
+  }
 
   /* padding-right : les cartes en pointilles (border dashed) ne doivent pas
      toucher l'ascenseur vertical (demande de Gilles, 2026-09-04). */
