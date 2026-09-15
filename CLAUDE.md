@@ -505,3 +505,113 @@ excludes any tag starting with `Autre` from what's listed to the model per categ
 the very next sentence of the prompt, "propose un intitulé précis" instead of a catch-all), and
 `DetailPhoto.svelte`'s moderator-facing tag-search suggestions do the same. `propose_utilisateur` on these
 rows is untouched — SpotSan's own picker should keep offering them.
+
+## Catalogue redesign & démérite scoring model — design session (2026-09-15)
+
+Gilles is building his own IVER catalogue independently and asked Claude to do the same exercise in
+parallel using the AI-suggested tags, to compare results ("voir si on se rejoint") before officializing
+either. Not started yet — this section captures the design discussion that needs to be resolved first, so
+none of it is lost if the work is picked up in a later session.
+
+**Why the catalogue work is paused**: building it now, on only the 325 AI-proposed tags collected so far,
+risks missing categories that would show up once the rest of the photo backlog is processed. Status of
+the `I&V` folder as of 2026-09-15: 2020 photos total, 1065 already processed into `UB-DETECIA`, **955
+remaining**. Gilles's call: process all 955 before building the catalogue (`node detection_iv.js --limite
+955 --modele claude-opus-5` from `IRUM/`, run from the app's own directory) — estimated ~$35 and ~2h
+sequential at the documented pilot rate (~$0.037/photo, ~7.7s/photo). **Blocked as of 2026-09-15**:
+`ANTHROPIC_API_KEY` isn't set in Claude's shell (only `SUPABASE_SERVICE_ROLE_KEY` is) — Gilles is setting it
+in his own terminal and will signal when to launch. Do not ask him to paste the key into chat.
+
+**Gilles's classification guidelines** (his own working rules, used to build his independent catalogue,
+given to Claude as the brief for the parallel exercise):
+1. Attach each tag to one and only one IVER category when possible.
+2. I/V vs E/R positioning designates a "culprit" — either the usager (I/V) or the exploitant (E/R).
+3. Don't force a tag into one category when there's a real chance it originated from the other — split
+   into two distinct tags instead when needed. Example: "Trace d'excrément sur le sol" is cleanly
+   Incivilité, but "Traces *anciennes* d'excrément" is clearly a défaut d'entretien — the age/staleness of
+   the trace is the signal that flips responsibility from usager to exploitant, so these must be two
+   different tags, not one ambiguous one.
+4. Goal: statistical rollups on an IVER typology at multiple depth levels. Two worked examples Gilles gave:
+   - "Excréments hors bol toilette ou urinoir" → sur le sol / sur les murs / sur l'assise toilette ou bord
+     urinoir / sur les équipements (localisation) → Fèces / Urines / Sang (nature, deeper level).
+   - "Défaut de nettoyage" → tartre / résidus d'excréments / détritus demeurant / fluides dispersés
+     demeurant (type de défaut) → au sol / aux murs / sur l'assise toilette ou bord urinoir / sur les
+     équipements (localisation) — note the nesting order is reversed vs. the first example (type-then-
+     location vs. location-then-nature) — Gilles nests whichever axis makes more sense per branch, not a
+     fixed cross-product order. Claude's catalogue must decide, per branch, which axis to nest first
+     rather than assume one fixed order everywhere.
+5. This implies the classification needs 2 "ghost" (implicit, not user-facing tags themselves) subdivisions
+   plus 2 real axes (+ 1 possible extra, relevance unconfirmed):
+   1. **Responsabilité** (ghost) + **Catégorie**: Utilisateur → I or V; Exploitant → E or R. (Whether
+      Responsabilité needs to be an explicit tree layer above I/V/E/R, or stays purely implicit the way
+      categorie_iver already encodes it today, is still open — not yet asked.)
+   2. **Typologie de défaut** (nature of the defect, can go several levels deep).
+   3. **Localisation**.
+   4. **Circonstance** (relevance to confirm, see Permanence below) — after usager passage, after cleaning
+      crew passage, or after maintenance crew passage.
+6. Long characterization codes are the cost of this — so the *typologie de défaut* axis specifically needs
+   to stay bounded, using an AMDEC-style Gravité tier, classified increasing, as the lever to keep it
+   manageable rather than letting it grow unbounded. Gilles's own draft scale (before Claude's proposed
+   fix, see below): inconfort visuel (1), difficultés d'utilisation (2), inconfort olfactif (4), utilisation
+   limitée à la fonction principale (5), utilisation dégradée pour toutes les fonctions (7), utilisation
+   fortement dégradée pour toutes les fonctions (7 — duplicate weight, flagged), utilisation impossible du
+   fait de la dégradation globale du service (10).
+
+**Le modèle de démérite** (Gilles, 2026-09-15) — four factors, not two:
+
+```
+Qualification (Quoi × Où) × Quantification  →  Gravité (dégradation du service / impact immédiat)
+Gravité × Permanence(-risque)  =  Démérite
+```
+
+- **Qualification** = Typologie de défaut (Quoi) × Localisation (Où) — this *is* the catalogue: every
+  leaf tag is one Qualification. In scope now.
+- **Quantification** (nombre / surface / volume) — a **per-observation measurement**, not a property baked
+  into the tag tree. Gilles: this is its own workstream, to pilot on a sample of IVER-positive photos, then
+  generalize to all of them. Out of scope for the catalogue itself; deferred as a separate project.
+- **Gravité** = f(Qualification, Quantification). Claude's working model, confirmed reasonable by Gilles
+  pending Claude's own proposed scale (below): each leaf tag carries a **base Gravité tier**; Quantification
+  then modulates it (a small/isolated instance stays at the base tier, an extensive one escalates a tier
+  or two) rather than Gravité being computed by some other formula entirely.
+- **Permanence** — refined twice by Gilles in this session. First cut: whether the defect persists despite
+  automated treatment / cleaning crew / maintenance crew passing (linked to "Circonstance" above). Second,
+  more precise cut: **not a constat (a fact observed on one photo) — a *risque de permanence*, an estimated
+  likelihood** derived from Qualification × Quantification, which then gets *verified* later by an actual
+  field/repeat observation. This is exactly why statistics matter here: the risk estimate needs calibrating
+  against real recurrence data over time — which depends on the "outil de comparaison d'état" (avant/après,
+  Phase 2 in the roadmap) not yet built. Deferred, and explicitly depends on Quantification being solved
+  first (Gilles: "une fois d'accord sur les typologies et une quantification, je serais en mesure d'évaluer
+  ... un risque de permanence").
+
+**Purpose of the Démérite score** (why this matters enough to get this precise), per Gilles:
+1. Tell the party at fault (usager, service Nettoyage, service Maintenance) how their action is being judged.
+2. For usagers specifically: potentially justify deducting points from their "permis d'utilisation" (see
+   the general rules file's points-permit principle).
+3. Tell the Exploitant what's observed and its criticality, to prompt the right response: trigger a remote
+   automatic wash, remotely condemn/shut down the sanitaire, urgently dispatch a cleaning crew, apply
+   penalties to a maintenance subcontractor, etc.
+
+**Claude's proposed Gravité scale** (asked for explicitly by Gilles, "j'attends que toi aussi tu proposes
+une échelle qui te paraisse pertinente" — not yet confirmed by Gilles): keep Gilles's scale almost as-is,
+it's already coherent (sensory/comfort criteria interleaved with functional-breadth criteria, deliberately
+non-linear like a real AMDEC severity scale) — only fix the one real defect, the duplicate weight `7`:
+
+| Tier | Libellé | Poids |
+|---|---|---|
+| 1 | Inconfort visuel (défaut esthétique, sans gêne d'usage) | 1 |
+| 2 | Difficultés d'utilisation (usage possible mais avec friction) | 2 |
+| 3 | Inconfort olfactif | 4 |
+| 4 | Utilisation limitée à la fonction principale (fonctions secondaires perdues) | 5 |
+| 5 | Utilisation dégradée pour toutes les fonctions | 7 |
+| 6 | Utilisation fortement dégradée pour toutes les fonctions | **8** (était 7, en doublon) |
+| 7 | Utilisation impossible du fait de la dégradation globale du service | 10 |
+
+The gaps left at 3, 6, 9 are deliberate (Gilles's original spacing) — room to insert an intermediate tier
+later without renumbering everything already assigned. Not yet confirmed by Gilles.
+
+**Next steps, in order**: (1) Gilles sets `ANTHROPIC_API_KEY` in his own terminal and signals Claude to
+launch the 955-photo batch. (2) Once it completes, re-pull the AI-suggested tag list (was 325, pre-batch)
+and build the actual catalogue proposal — Qualification tree (typologie × localisation, deciding nesting
+order per branch) with a base Gravité tier per leaf, following Gilles's 6 guidelines above. (3)
+Quantification and Permanence-risque stay explicitly out of scope for that proposal — separate workstreams,
+not to be improvised into the catalogue structure.
