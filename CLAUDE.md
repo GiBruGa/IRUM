@@ -518,9 +518,13 @@ risks missing categories that would show up once the rest of the photo backlog i
 the `I&V` folder as of 2026-09-15: 2020 photos total, 1065 already processed into `UB-DETECIA`, **955
 remaining**. Gilles's call: process all 955 before building the catalogue (`node detection_iv.js --limite
 955 --modele claude-opus-5` from `IRUM/`, run from the app's own directory) — estimated ~$35 and ~2h
-sequential at the documented pilot rate (~$0.037/photo, ~7.7s/photo). **Blocked as of 2026-09-15**:
-`ANTHROPIC_API_KEY` isn't set in Claude's shell (only `SUPABASE_SERVICE_ROLE_KEY` is) — Gilles is setting it
-in his own terminal and will signal when to launch. Do not ask him to paste the key into chat.
+sequential at the documented pilot rate (~$0.037/photo, ~7.7s/photo). **Launched 2026-09-15** (background
+task, ~2h expected): `ANTHROPIC_API_KEY` already existed as a Windows user env var but was set *after*
+this Claude session's shell had already started, so it wasn't inherited — fixed without a session restart
+by reading the current value straight from the registry via PowerShell at the point of running the
+command (see `Regles Generales de Conception des Modules UrBizia.md`, "Clé API Anthropic", for the exact
+one-liner — reusable for any env var in the same situation). Once the batch finishes: re-pull the
+AI-suggested tag list (was 325, pre-batch) before building the catalogue proposal below.
 
 **Gilles's classification guidelines** (his own working rules, used to build his independent catalogue,
 given to Claude as the brief for the parallel exercise):
