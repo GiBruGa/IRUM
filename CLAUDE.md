@@ -536,8 +536,14 @@ task, ~2h expected): `ANTHROPIC_API_KEY` already existed as a Windows user env v
 this Claude session's shell had already started, so it wasn't inherited — fixed without a session restart
 by reading the current value straight from the registry via PowerShell at the point of running the
 command (see `Regles Generales de Conception des Modules UrBizia.md`, "Clé API Anthropic", for the exact
-one-liner — reusable for any env var in the same situation). Once the batch finishes: re-pull the
-AI-suggested tag list (was 325, pre-batch) before building the catalogue proposal below.
+one-liner — reusable for any env var in the same situation).
+
+**Batch completed 2026-09-15**: 954/955 succeeded (99.9%, 1 oversized-photo failure), all 2020 photos in
+`I&V\` now processed. Actual cost $31.43 (vs. ~$35 estimated), 6396s (~1h47), 290 distinct IVER types
+detected, 2664 total occurrences, confidence haute=409/moyenne=532/basse=13. **AI-suggested tag pool grew
+from 325 to 568** (`propose_par_ia=true` count) — this is the input material for the catalogue proposal
+below, once Gilles gives the go-ahead to start (still open whether to wait for the additional ~100 photos
+noted separately, or start now on 568).
 
 **Additional ~100 photos incoming (noted 2026-09-15)**: Gilles is in the process of collecting roughly
 another hundred photos to add to `I&V\`, separate from the 955-photo batch above. Not uploaded yet as of
