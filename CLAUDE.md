@@ -140,6 +140,19 @@ node detection_iv.js --limite 3 --modele claude-opus-5
 Writes a CSV (per-photo results) + a `_dimensionnement.json` (aggregate metrics, per the Dimensionnement
 rule above) next to the source photos in `I&V\`.
 
+**Marche à suivre pour un lot (2026-09-15, à jour)** — Gilles lance ce script lui-même, directement dans
+son propre PowerShell (plus simple que de passer par Claude : son terminal a toujours l'environnement à
+jour, et il voit l'avancement ligne par ligne en direct, sans détour par un fichier). À coller tel quel :
+```powershell
+cd "D:\UrBizia - Anthropic\IRUM"
+node detection_iv.js --limite 2000 --modele claude-opus-5
+```
+`--limite` se limite automatiquement à ce qu'il reste réellement à traiter (`photos.slice(0, limite)`,
+voir `detection_iv.js`) — un nombre volontairement plus grand que le total de photos (2000 ne divise pas ce
+qui existe déjà) veut simplement dire "traite tout ce qui reste", pas besoin de calculer le compte exact
+avant de lancer. Le script affiche lui-même combien il reste ("Reprise : X déjà traitée(s) — Y restante(s)")
+dès le démarrage. Pour un tout petit test, remplacer `2000` par un petit nombre comme `3`.
+
 **Writes results into Supabase/EkoMa too (2026-09-02)**: each successful classification also uploads the
 photo to `PointSan-Incidents` and inserts `Incident_Reports`/`Incident_Report_Tags` under the virtual
 sanitaire `UB-DETECIA` (`verifie_humain=false`), so it shows up as an orange "à vérifier" vignette in
