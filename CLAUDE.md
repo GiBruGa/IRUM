@@ -539,6 +539,12 @@ command (see `Regles Generales de Conception des Modules UrBizia.md`, "Clé API 
 one-liner — reusable for any env var in the same situation). Once the batch finishes: re-pull the
 AI-suggested tag list (was 325, pre-batch) before building the catalogue proposal below.
 
+**Additional ~100 photos incoming (noted 2026-09-15)**: Gilles is in the process of collecting roughly
+another hundred photos to add to `I&V\`, separate from the 955-photo batch above. Not uploaded yet as of
+this note. Doesn't block starting the catalogue work once the 955-batch completes — treat this small
+top-up as a follow-up batch to run later (same command, once the new files are actually in the folder),
+not something to wait for before building the first catalogue proposal.
+
 **Gilles's classification guidelines** (his own working rules, used to build his independent catalogue,
 given to Claude as the brief for the parallel exercise):
 1. Attach each tag to one and only one IVER category when possible.
