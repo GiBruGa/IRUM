@@ -543,7 +543,15 @@ one-liner — reusable for any env var in the same situation).
 detected, 2664 total occurrences, confidence haute=409/moyenne=532/basse=13. **AI-suggested tag pool grew
 from 325 to 568** (`propose_par_ia=true` count) — this is the input material for the catalogue proposal
 below, once Gilles gives the go-ahead to start (still open whether to wait for the additional ~100 photos
-noted separately, or start now on 568).
+noted separately, or start now on 568). Started 2026-09-18 on 568, per Gilles's go-ahead.
+
+**To-do — audit the "no IVER detected" (RAS) photos (asked by Gilles, 2026-09-18)**: he was surprised by
+what looked like a low detection rate on the batch. Checked: **265 of 2019 `UB-DETECIA` photos (~13%) have
+no `tags_ia_origine`** (empty/null — the model said "état normal"). Gilles wants a future review pass
+specifically over these 265 to confirm they're genuinely clean (a false-negative audit of the AI, not the
+false-positive review Pondération already does) — not started yet, no UI exists yet for "browse only the
+RAS photos" (Pondération's litige/all toggle doesn't surface these, since a RAS photo has no tags to be
+"en litige" about). Needs its own filter or a small addition to Pondération/Modération Détection IVER.
 
 **Additional ~100 photos incoming (noted 2026-09-15)**: Gilles is in the process of collecting roughly
 another hundred photos to add to `I&V\`, separate from the 955-photo batch above. Not uploaded yet as of
