@@ -153,7 +153,8 @@ qui existe déjà) veut simplement dire "traite tout ce qui reste", pas besoin d
 avant de lancer. Le script affiche lui-même combien il reste ("Reprise : X déjà traitée(s) — Y restante(s)")
 dès le démarrage. Pour un tout petit test, remplacer `2000` par un petit nombre comme `3`.
 
-**Writes results into Supabase/EkoMa too (2026-09-02)**: each successful classification also uploads the
+**[SUPERSEDED 2026-11-13 — the `UB-DETECIA` sanitaire and its Supabase data no longer exist; training data is
+now local, see "ARCHITECTURE CHANGE" further down.]** **Writes results into Supabase/EkoMa too (2026-09-02)**: each successful classification also uploads the
 photo to `PointSan-Incidents` and inserts `Incident_Reports`/`Incident_Report_Tags` under the virtual
 sanitaire `UB-DETECIA` (`verifie_humain=false`), so it shows up as an orange "à vérifier" vignette in
 EkoMa's Modération/IRUM tabs — that's the actual human-review surface, not the CSV. Requires
@@ -558,6 +559,55 @@ another hundred photos to add to `I&V\`, separate from the 955-photo batch above
 this note. Doesn't block starting the catalogue work once the 955-batch completes — treat this small
 top-up as a follow-up batch to run later (same command, once the new files are actually in the folder),
 not something to wait for before building the first catalogue proposal.
+
+### ARCHITECTURE CHANGE (2026-11-13) — training data now lives locally, not in Supabase
+
+**Read this before touching anything that mentions `UB-DETECIA`, `PointSan-Incidents`, or
+"Modération Détection IVER" reading bulk photos — several older sections of this file describe the
+pre-change setup and are now partly stale.**
+
+What happened: the volume of the training photos plus their data (~3.5 GB, 2019 reports, ~2860 tag rows)
+exceeded Supabase's free tier and forced the paid ("pro") plan. Supabase cut Gilles's access for about two
+months. He resolved it in a separate conversation by **extracting everything to `D:\UrBizia - Anthropic\
+UB-DETECIA\`** and **deleting the fake sanitaire `UB-DETECIA`** (the virtual toilet block that was collecting
+these reports inside SpotSan) from Supabase.
+
+State verified 2026-11-13: Supabase has **0** `Incident_Reports` for `UB-DETECIA` (22 reports in total — only
+real SpotSan signalements), the `UB-DETECIA` row is gone from `SanitaryBlocks_Inventory`. The taxonomy
+(`Incivilites_Taxonomie`, 587 rows of which **568 are `propose_par_ia`**) is small and **stays in Supabase** —
+the catalogue work keeps happening there.
+
+**New division of work, decided by Gilles:**
+- **Local data (`UB-DETECIA\`)** → AI training and tuning (detection prompt, catalogue design, model
+  evaluation, the RAS false-negative audit).
+- **SpotSan data in Supabase** → real-world application on real signalements only.
+
+Layout of `UB-DETECIA\` (2031 files):
+- `photos\` — 2022 photos, named `<timestamp>_-_<original path flattened>.jpg` (the old bucket object names).
+- `donnees\` — `Incident_Reports_UB-DETECIA.json`/`.csv` (2019 reports; same columns as the table:
+  `Report_id, UB_id, Photo, Description, Reported_at, Reported_by, user_id, tag, verifie_humain,
+  confiance_ia, tags_ia_origine, tags_utilisateur, pondere_par, pondere_le`), `Incident_Report_Tags.json`
+  (the current/corrected tags per report), `Incivilites_Taxonomie.json` (taxonomy snapshot),
+  `Catalogue_Versions.json`, `Tags_IA_Equivalences.json` (0 bytes — there were no equivalences),
+  `SanitaryBlocks_Inventory_support.json`, `manifeste_photos.csv` (photo manifest),
+  `signalements_sans_photo.csv` (empty).
+- Verified intact: 2019 reports, **265 with no `tags_ia_origine` (RAS)** — same figure as before the move.
+- Gotcha: the `.json` files carry a UTF-8 BOM (written by PowerShell) — strip it before `JSON.parse`
+  (`s.charCodeAt(0) === 0xFEFF ? s.slice(1) : s`).
+
+**Consequences to handle (none done yet — decide with Gilles before coding):**
+1. `detection_iv.js` still uploads to the `PointSan-Incidents` bucket and inserts `Incident_Reports` /
+   `Incident_Report_Tags` under `UB-DETECIA`. That sanitaire no longer exists (FK would fail), and
+   recreating it would recreate the exact storage/volume problem. For training runs the script must run
+   **without Supabase writes** (`--sans-supabase`, CSV only) or be adapted to append to
+   `UB-DETECIA\donnees\` locally. Don't run it in default mode.
+2. "Modération Détection IVER" (ex-Pondération) now only sees the 22 real SpotSan reports. Human review of
+   the training photos — verification of detections, the **265-photo RAS audit** — needs a local tool or
+   approach (open question: local HTML viewer reading `UB-DETECIA\`, or something else). Not decided.
+3. The catalogue proposal (`IRUM\.catalogue_travail\`, 568 tags → I/V/E/R × typologie × localisation ×
+   gravité) is unaffected: it reads `Incivilites_Taxonomie`, which is still in Supabase.
+4. General principle worth promoting to the general rules file *if Gilles agrees* (not yet asked whether
+   it's général or spécifique): never store bulk training corpora in Supabase — keep them on local disk.
 
 **Gilles's classification guidelines** (his own working rules, used to build his independent catalogue,
 given to Claude as the brief for the parallel exercise):
